@@ -76,3 +76,4 @@ public/uploads/
 
 # Misc
 *.tgz
+/generated/prisma
