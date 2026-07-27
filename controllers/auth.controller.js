@@ -199,3 +199,39 @@ export async function getMe(req, res) {
         });
     }
 }
+
+// Google OAuth callback
+
+// GET /api/v1/auth/google/callback
+// Called by passport after Google authenticates the user.
+// Issues JWT, sets cookie, then redirects the browser to the frontend dashboard.
+export async function googleCallback(req, res) {
+    try {
+        const user = req.user; // set by passport after strategy runs
+        if (!user) {
+            return res.redirect(
+                `${process.env.FRONTEND_URL}/account?error=google_failed`
+            );
+        }
+
+        const token = generateToken(user);
+
+        const cookieOptions = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        };
+
+        const dashboard =
+            user.role === "ADMIN"
+                ? "/account/dashboard/admin"
+                : "/account/dashboard";
+
+        res.cookie("token", token, cookieOptions)
+           .redirect(`${process.env.FRONTEND_URL}${dashboard}`);
+    } catch (error) {
+        console.error("[googleCallback]", error);
+        res.redirect(`${process.env.FRONTEND_URL}/account?error=server_error`);
+    }
+}

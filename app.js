@@ -1,17 +1,72 @@
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import express from "express";
+import jwt from "jsonwebtoken";
+import passport from "./config/passport.js";
 import authRouter from "./routes/auth.routes.js";
+import userRouter from "./routes/user.routes.js";
 import prisma from "./database/neon.js";
+import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
 
 const app = express();
 
-app.use(express.json())
-app.use(cookieParser())
-app.use(express.urlencoded({extended: true}))
+// CORS — allow the Next.js frontend to send cookies cross-origin
+app.use(cors({
+  origin: FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+}));
 
-app.use("/api/v1/auth", authRouter)
+app.use(express.json());
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (req, res)=>{
+// Initialise passport (no session — we use JWT)
+app.use(passport.initialize());
+
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/users", userRouter);
+
+// Google OAuth routes
+// These live at /auth/google (not /api/v1/auth) to match the callback URL
+// registered in Google Cloud Console.
+
+// Step 1 — redirect user to Google
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+);
+
+// Step 2 — Google redirects back here
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: `${FRONTEND_URL}/account?error=google_failed`,
+    session: false,
+  }),
+  (req, res) => {
+    const user = req.user;
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRY || "7d" }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    const destination = user.role === "ADMIN"
+      ? `${FRONTEND_URL}/account/dashboard/admin`
+      : `${FRONTEND_URL}/account/dashboard`;
+
+    res.redirect(destination);
+  }
+);
+
+app.get("/", (req, res) => {
   res.send({
     "title": "The Castra Collection ExpressJS Backend API",
     "body": "Welcome to the Castra Collection ExpressJS Backend API"
