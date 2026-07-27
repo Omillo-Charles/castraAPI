@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import passport from "./config/passport.js";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
+import addressRouter from "./routes/adresses.routes.js";
 import prisma from "./database/neon.js";
 import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
 
@@ -23,8 +24,9 @@ app.use(express.urlencoded({ extended: true }));
 // Initialise passport (no session — we use JWT)
 app.use(passport.initialize());
 
-app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/users", userRouter);
+app.use("/api/v1/auth",      authRouter);
+app.use("/api/v1/users",     userRouter);
+app.use("/api/v1/addresses", addressRouter);
 
 // Google OAuth routes
 // These live at /auth/google (not /api/v1/auth) to match the callback URL
