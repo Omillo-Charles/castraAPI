@@ -3,11 +3,12 @@ import cors from "cors";
 import express from "express";
 import jwt from "jsonwebtoken";
 import passport from "./config/passport.js";
-import authRouter    from "./routes/auth.routes.js";
-import userRouter    from "./routes/user.routes.js";
-import addressRouter from "./routes/adresses.routes.js";
-import productRouter from "./routes/product.routes.js";
-import cartRouter    from "./routes/cart.routes.js";
+import authRouter     from "./routes/auth.routes.js";
+import userRouter     from "./routes/user.routes.js";
+import addressRouter  from "./routes/adresses.routes.js";
+import productRouter  from "./routes/product.routes.js";
+import cartRouter     from "./routes/cart.routes.js";
+import wishlistRouter from "./routes/wishlist.routes.js";
 import prisma from "./database/neon.js";
 import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
 
@@ -31,6 +32,7 @@ app.use("/api/v1/users",     userRouter);
 app.use("/api/v1/addresses", addressRouter);
 app.use("/api/v1/products",  productRouter);
 app.use("/api/v1/cart",      cartRouter);
+app.use("/api/v1/wishlist",  wishlistRouter);
 
 // Google OAuth routes
 // These live at /auth/google (not /api/v1/auth) to match the callback URL
