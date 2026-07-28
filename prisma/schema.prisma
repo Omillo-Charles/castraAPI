@@ -26,7 +26,6 @@ enum OrderStatus {
 enum PaymentMethod {
   MPESA_PAYBILL
   MPESA_STK
-  CASH_ON_DELIVERY
 }
 
 enum PaymentStatus {
