@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 
-config({path: ".env"})
+config({ path: ".env" })
 
 export const {
     PORT,
@@ -15,4 +15,10 @@ export const {
     CLOUDINARY_CLOUD_NAME,
     CLOUDINARY_API_KEY,
     CLOUDINARY_API_SECRET,
-} = process.env
+    MPESA_ENV,
+    MPESA_CONSUMER_KEY,
+    MPESA_CONSUMER_SECRET,
+    MPESA_BUSINESS_SHORT_CODE,
+    MPESA_PASSKEY,
+    MPESA_CALLBACK_URL
+} = process.env;

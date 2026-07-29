@@ -5,9 +5,9 @@ import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } from
 // Configure Cloudinary v2
 cloudinary.config({
     cloud_name: CLOUDINARY_CLOUD_NAME,
-    api_key:    CLOUDINARY_API_KEY,
+    api_key: CLOUDINARY_API_KEY,
     api_secret: CLOUDINARY_API_SECRET,
-    secure:     true, // always serve images over HTTPS
+    secure: true, // always serve images over HTTPS
 });
 
 // Multer — store files in memory so we can stream to Cloudinary
@@ -18,11 +18,11 @@ export const upload = multer({
     storage,
     limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
     fileFilter: (_req, file, cb) => {
-        const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/jpg"];
         if (allowed.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error("Only JPEG, PNG, WebP and GIF images are allowed."));
+            cb(new Error("Only JPEG, PNG, JPG, WebP and GIF images are allowed."));
         }
     },
 });
