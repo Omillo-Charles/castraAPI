@@ -24,7 +24,6 @@ enum OrderStatus {
 }
 
 enum PaymentMethod {
-  MPESA_PAYBILL
   MPESA_STK
 }
 
@@ -216,9 +215,6 @@ model Payment {
   method             PaymentMethod
   status             PaymentStatus @default(PENDING)
   amount             Int           // in KES
-
-  // M-Pesa Paybill
-  mpesaRef           String?       // transaction ref entered by user
 
   // M-Pesa STK Push
   stkPhone           String?       // phone number the prompt was sent to

@@ -1,275 +1,183 @@
 import prisma from "../database/neon.js";
-import {
-    initiateSTKPush,
-    querySTKPush,
-    parseSTKCallback,
-    normalisePhone,
-} from "../config/mpesa.js";
+import mpesa from "../config/mpesa.js";
 
-// POST /api/v1/payments/stk-push
-// Initiates an M-Pesa STK push for a given order.
-// Body: { orderId, phone }
-// The order must belong to the authenticated user and have a PENDING payment.
-export async function stkPush(req, res) {
+// Initiate M-Pesa STK Push
+// POST /api/v1/payments/stkpush
+export async function initiateStkPush(req, res) {
     try {
         const { orderId, phone } = req.body;
 
         if (!orderId || !phone) {
-            return res.status(400).json({
-                success: false,
-                message: "orderId and phone are required.",
-            });
+            return res.status(400).json({ success: false, message: "orderId and phone are required." });
         }
 
-        // Verify the order exists and belongs to the user
-        const order = await prisma.order.findFirst({
-            where:   { id: orderId, userId: req.user.id },
-            include: { payment: true },
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: { payment: true }
         });
 
         if (!order) {
             return res.status(404).json({ success: false, message: "Order not found." });
         }
 
-        if (order.payment?.status === "PAID") {
-            return res.status(400).json({ success: false, message: "This order has already been paid." });
+        if (order.payment && order.payment.status === "PAID") {
+            return res.status(400).json({ success: false, message: "Order is already paid." });
         }
 
-        // Normalise phone before sending
-        let normalisedPhone;
-        try {
-            normalisedPhone = normalisePhone(phone);
-        } catch {
-            return res.status(400).json({ success: false, message: "Invalid phone number format." });
-        }
+        // Check if M-Pesa is configured (assume it is for now)
 
-        // Initiate STK push via Daraja
-        const stkRes = await initiateSTKPush({
-            amount:      order.total,
-            phone:       normalisedPhone,
-            orderId:     order.id,
+        // Call Daraja STK Push
+        const stkResponse = await mpesa.initiateSTKPush({
+            amount: order.total,
+            phone: phone,
+            orderId: order.id,
             description: "CastraOrder",
         });
 
-        // Daraja returns ResponseCode "0" (string) for a successful initiation
-        if (stkRes.ResponseCode !== "0") {
-            return res.status(502).json({
-                success: false,
-                message: stkRes.ResponseDescription || "M-Pesa initiation failed.",
-            });
-        }
-
-        // Upsert the payment record with STK details
+        // Upsert payment record
         await prisma.payment.upsert({
-            where:  { orderId },
+            where: { orderId: order.id },
             update: {
-                method:            "MPESA_STK",
-                stkPhone:          normalisedPhone,
-                checkoutRequestId: stkRes.CheckoutRequestID,
-                status:            "PENDING",
+                method: "MPESA_STK",
+                status: "PENDING",
+                amount: order.total,
+                stkPhone: mpesa.normalisePhone(phone),
+                checkoutRequestId: stkResponse.CheckoutRequestID,
             },
             create: {
-                orderId,
-                method:            "MPESA_STK",
-                amount:            order.total,
-                stkPhone:          normalisedPhone,
-                checkoutRequestId: stkRes.CheckoutRequestID,
-                status:            "PENDING",
-            },
+                orderId: order.id,
+                method: "MPESA_STK",
+                status: "PENDING",
+                amount: order.total,
+                stkPhone: mpesa.normalisePhone(phone),
+                checkoutRequestId: stkResponse.CheckoutRequestID,
+            }
         });
 
         return res.status(200).json({
-            success:           true,
-            message:           stkRes.CustomerMessage,
-            checkoutRequestId: stkRes.CheckoutRequestID,
-            merchantRequestId: stkRes.MerchantRequestID,
+            success: true,
+            message: "STK Push initiated successfully.",
+            checkoutRequestId: stkResponse.CheckoutRequestID,
         });
+
     } catch (error) {
-        console.error("[stkPush]", error);
-        return res.status(500).json({ success: false, message: "Server error." });
+        console.error("[initiateStkPush]", error);
+        return res.status(500).json({ success: false, message: error.message || "Server error during STK Push." });
     }
 }
 
-// POST /api/v1/payments/stk-callback
-// Daraja webhook — called by Safaricom when the customer completes or cancels.
-// No auth — this is a public endpoint called by Safaricom's servers.
-export async function stkCallback(req, res) {
-    // Always acknowledge Daraja immediately, even if we fail internally
-    res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-
+// Poll STK Push status
+// GET /api/v1/payments/status/:checkoutRequestId
+export async function getStkStatus(req, res) {
     try {
-        const parsed = parseSTKCallback(req.body);
-        if (!parsed) {
-            console.error("[stkCallback] Could not parse callback body:", req.body);
-            return;
-        }
+        const { checkoutRequestId } = req.params;
 
         const payment = await prisma.payment.findFirst({
-            where: { checkoutRequestId: parsed.checkoutRequestId },
+            where: { checkoutRequestId }
         });
 
         if (!payment) {
-            console.error("[stkCallback] No payment found for CheckoutRequestID:", parsed.checkoutRequestId);
-            return;
+            return res.status(404).json({ success: false, message: "Payment record not found." });
         }
 
-        if (parsed.success) {
-            // Payment completed — update payment and confirm the order
-            await prisma.$transaction([
-                prisma.payment.update({
-                    where: { id: payment.id },
-                    data:  {
-                        status:             "PAID",
-                        mpesaReceiptNumber: parsed.mpesaReceiptNumber,
-                    },
-                }),
-                prisma.order.update({
-                    where: { id: payment.orderId },
-                    data:  { status: "CONFIRMED" },
-                }),
-            ]);
-            console.log(`[stkCallback] Payment confirmed: ${parsed.mpesaReceiptNumber} for order ${payment.orderId}`);
-        } else {
-            // Payment failed or was cancelled
-            await prisma.payment.update({
-                where: { id: payment.id },
-                data:  { status: "FAILED" },
-            });
-            console.log(`[stkCallback] Payment failed (code ${parsed.resultCode}): ${parsed.resultDesc}`);
-        }
-    } catch (error) {
-        console.error("[stkCallback] Internal error:", error);
-    }
-}
-
-// POST /api/v1/payments/stk-query
-// Frontend polls this after placing an STK push order to check if payment completed.
-// Body: { checkoutRequestId }
-export async function stkQuery(req, res) {
-    try {
-        const { checkoutRequestId } = req.body;
-
-        if (!checkoutRequestId) {
-            return res.status(400).json({ success: false, message: "checkoutRequestId is required." });
+        // If we already marked it as PAID or FAILED via callback, just return
+        if (payment.status !== "PENDING") {
+            return res.status(200).json({ success: true, payment });
         }
 
-        // First check our own DB — callback may have already updated it
-        const payment = await prisma.payment.findFirst({
-            where: { checkoutRequestId },
-        });
+        // Otherwise query Daraja
+        const statusResponse = await mpesa.querySTKPush(checkoutRequestId);
 
-        if (payment?.status === "PAID") {
-            return res.status(200).json({ success: true, status: "PAID", message: "Payment confirmed." });
-        }
-
-        if (payment?.status === "FAILED") {
-            return res.status(200).json({ success: false, status: "FAILED", message: "Payment was not completed." });
-        }
-
-        // Still PENDING — query Daraja directly
-        const darajaRes = await querySTKPush(checkoutRequestId);
-
-        // ResultCode 0 = paid, 1032 = cancelled, others = pending or failed
-        if (darajaRes.ResultCode === "0" || darajaRes.ResultCode === 0) {
-            if (payment) {
-                await prisma.payment.update({
-                    where: { id: payment.id },
-                    data:  { status: "PAID", mpesaReceiptNumber: darajaRes.ResultDesc },
-                });
+        // Update payment record based on query result
+        const newStatus = Number(statusResponse.ResultCode) === 0 ? "PAID" : "FAILED";
+        const updatedPayment = await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+                status: newStatus,
             }
-            return res.status(200).json({ success: true, status: "PAID", message: "Payment confirmed." });
-        }
-
-        return res.status(200).json({
-            success: false,
-            status:  "PENDING",
-            message: darajaRes.ResultDesc || "Payment not yet confirmed.",
         });
+
+        return res.status(200).json({ success: true, payment: updatedPayment });
+
     } catch (error) {
-        console.error("[stkQuery]", error);
-        return res.status(500).json({ success: false, message: "Server error." });
+        console.error("[getStkStatus]", error);
+        return res.status(500).json({ success: false, message: error.message || "Server error while querying status." });
     }
 }
 
-// POST /api/v1/payments/manual
-// For Paybill payments — customer provides the M-Pesa reference after paying manually.
-// Body: { orderId, mpesaRef }
-export async function submitManualPayment(req, res) {
+// Admin: manually update payment status after confirming an offline/manual payment.
+// PATCH /api/v1/payments/:id/status
+export async function updatePaymentStatus(req, res) {
     try {
-        const { orderId, mpesaRef } = req.body;
+        const { id } = req.params;
+        const { status, mpesaReceiptNumber } = req.body;
 
-        if (!orderId || !mpesaRef) {
-            return res.status(400).json({ success: false, message: "orderId and mpesaRef are required." });
+        if (!["PENDING", "PAID", "FAILED"].includes(status)) {
+            return res.status(400).json({ success: false, message: "status must be PENDING, PAID, or FAILED." });
         }
 
-        const order = await prisma.order.findFirst({
-            where:   { id: orderId, userId: req.user.id },
-            include: { payment: true },
-        });
-
-        if (!order) {
-            return res.status(404).json({ success: false, message: "Order not found." });
+        const payment = await prisma.payment.findUnique({ where: { id } });
+        if (!payment) {
+            return res.status(404).json({ success: false, message: "Payment not found." });
         }
 
-        if (order.payment?.status === "PAID") {
-            return res.status(400).json({ success: false, message: "This order has already been paid." });
-        }
-
-        // Upsert payment record — admin will verify the ref manually or via C2B callback
-        const payment = await prisma.payment.upsert({
-            where:  { orderId },
-            update: {
-                method:    "MPESA_PAYBILL",
-                mpesaRef,
-                status:    "PENDING", // stays PENDING until admin/C2B confirms
-            },
-            create: {
-                orderId,
-                method:    "MPESA_PAYBILL",
-                amount:    order.total,
-                mpesaRef,
-                status:    "PENDING",
+        const updatedPayment = await prisma.payment.update({
+            where: { id },
+            data: {
+                status,
+                mpesaReceiptNumber: mpesaReceiptNumber?.trim() || payment.mpesaReceiptNumber,
             },
         });
 
-        return res.status(200).json({
-            success: true,
-            message: "Payment reference received. Your order is being confirmed.",
-            payment: { id: payment.id, status: payment.status, mpesaRef: payment.mpesaRef },
-        });
+        return res.status(200).json({ success: true, payment: updatedPayment });
     } catch (error) {
-        console.error("[submitManualPayment]", error);
-        return res.status(500).json({ success: false, message: "Server error." });
+        console.error("[updatePaymentStatus]", error);
+        return res.status(500).json({ success: false, message: "Server error while updating payment status." });
     }
 }
 
-// GET /api/v1/payments/status/:orderId
-// Returns the payment status for a given order (user must own the order).
-export async function getPaymentStatus(req, res) {
+// M-Pesa Callback Endpoint
+// POST /payment/mpesa/callback (Usually exposed at root, but can be under /api/v1/payments/callback)
+export async function mpesaCallback(req, res) {
     try {
-        const { orderId } = req.params;
+        console.log("[mpesaCallback] Received payload:", JSON.stringify(req.body, null, 2));
 
-        const order = await prisma.order.findFirst({
-            where:   { id: orderId, userId: req.user.id },
-            include: { payment: true },
-        });
+        const result = mpesa.parseSTKCallback(req.body);
 
-        if (!order) {
-            return res.status(404).json({ success: false, message: "Order not found." });
+        if (!result) {
+            console.error("[mpesaCallback] Invalid callback payload.");
+            return res.status(400).send("Invalid callback payload");
         }
 
-        if (!order.payment) {
-            return res.status(200).json({ success: true, status: "NO_PAYMENT", message: "No payment recorded yet." });
+        if (!result.checkoutRequestId) {
+            console.error("[mpesaCallback] Missing CheckoutRequestID in callback.");
+            return res.status(400).send("Invalid callback payload");
         }
 
-        return res.status(200).json({
-            success: true,
-            status:  order.payment.status,
-            method:  order.payment.method,
-            ref:     order.payment.mpesaRef ?? order.payment.mpesaReceiptNumber ?? null,
+        const payment = await prisma.payment.findFirst({
+            where: { checkoutRequestId: result.checkoutRequestId }
         });
+
+        if (!payment) {
+            console.error(`[mpesaCallback] Payment record not found for CheckoutRequestID: ${result.checkoutRequestId}`);
+            return res.status(200).send("Acknowledged"); // Return 200 so Daraja stops retrying
+        }
+
+        const newStatus = result.success ? "PAID" : "FAILED";
+
+        await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+                status: newStatus,
+                mpesaReceiptNumber: result.mpesaReceiptNumber || null,
+            }
+        });
+
+        console.log(`[mpesaCallback] Payment ${payment.id} marked as ${newStatus}.`);
+        return res.status(200).send("Acknowledged");
+
     } catch (error) {
-        console.error("[getPaymentStatus]", error);
-        return res.status(500).json({ success: false, message: "Server error." });
+        console.error("[mpesaCallback] Error processing callback:", error);
+        return res.status(500).send("Internal Server Error");
     }
 }

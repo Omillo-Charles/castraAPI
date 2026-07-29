@@ -37,6 +37,11 @@ const USER_ORDER_SELECT = {
             price: true,
             qty: true,
             productId: true,
+            product: {
+                select: {
+                    images: true,
+                },
+            },
         },
     },
     payment: {
@@ -45,7 +50,6 @@ const USER_ORDER_SELECT = {
             method: true,
             status: true,
             amount: true,
-            mpesaRef: true,
             mpesaReceiptNumber: true,
             stkPhone: true,
             checkoutRequestId: true,
@@ -54,12 +58,22 @@ const USER_ORDER_SELECT = {
     },
 };
 
+function withOrderItemImages(order) {
+    return {
+        ...order,
+        items: order.items.map(({ product, ...item }) => ({
+            ...item,
+            imageUrl: product?.images?.[0] ?? null,
+        })),
+    };
+}
+
 // POST /api/v1/orders
 // Places a new order from the user's active cart.
 // Body: {
 //   contact:  { firstName, lastName, email?, phone },
 //   delivery: { street, city, county, notes? },
-//   payment:  { method: "mpesa-paybill"|"mpesa-stk", mpesaRef?, stkPhone? }
+//   payment:  { method: "mpesa-stk", stkPhone? }
 // }
 // Flow:
 //   1. Validate cart is not empty
@@ -173,56 +187,53 @@ export async function placeOrder(req, res) {
         let paymentRecord = null;
         let stkDetails = null;
 
-        if (paymentData.method === "mpesa-stk") {
-            // Initiate STK push
-            let normalisedPhone;
+        // Create a default PENDING payment record first
+        paymentRecord = await prisma.payment.create({
+            data: {
+                orderId: order.id,
+                method: "MPESA_STK",
+                amount: total,
+                stkPhone: paymentData.stkPhone ?? null,
+                status: "PENDING",
+            },
+        });
+
+        let normalisedPhone;
+        try {
+            normalisedPhone = normalisePhone(paymentData.stkPhone);
+        } catch {
+            normalisedPhone = null;
+        }
+
+        if (normalisedPhone) {
             try {
-                normalisedPhone = normalisePhone(paymentData.stkPhone);
-            } catch {
-                // Order is created — just skip the STK push, user can retry via /payments/stk-push
-                normalisedPhone = null;
-            }
-
-            if (normalisedPhone) {
-                try {
-                    const stkRes = await initiateSTKPush({
-                        amount: total,
-                        phone: normalisedPhone,
-                        orderId: order.id,
-                        description: "CastraOrder",
-                    });
-
-                    paymentRecord = await prisma.payment.create({
-                        data: {
-                            orderId: order.id,
-                            method: "MPESA_STK",
-                            amount: total,
-                            stkPhone: normalisedPhone,
-                            checkoutRequestId: stkRes.CheckoutRequestID ?? null,
-                            status: "PENDING",
-                        },
-                    });
-
-                    stkDetails = {
-                        checkoutRequestId: stkRes.CheckoutRequestID,
-                        customerMessage: stkRes.CustomerMessage,
-                    };
-                } catch (stkError) {
-                    console.error("[placeOrder] STK push failed:", stkError.message);
-                    // Order still created — user can retry payment later
-                }
-            }
-        } else {
-            // Paybill — store the ref if provided, else leave it for later
-            paymentRecord = await prisma.payment.create({
-                data: {
-                    orderId: order.id,
-                    method: "MPESA_PAYBILL",
+                const stkRes = await initiateSTKPush({
                     amount: total,
-                    mpesaRef: paymentData.mpesaRef ?? null,
-                    status: "PENDING",
-                },
-            });
+                    phone: normalisedPhone,
+                    orderId: order.id,
+                    description: "CastraOrder",
+                });
+
+                paymentRecord = await prisma.payment.update({
+                    where: { id: paymentRecord.id },
+                    data: {
+                        stkPhone: normalisedPhone,
+                        checkoutRequestId: stkRes.CheckoutRequestID ?? null,
+                    },
+                });
+
+                stkDetails = {
+                    checkoutRequestId: stkRes.CheckoutRequestID,
+                    customerMessage: stkRes.CustomerMessage,
+                };
+            } catch (stkError) {
+                console.error("[placeOrder] STK push failed:", stkError.message);
+                paymentRecord = await prisma.payment.update({
+                    where: { id: paymentRecord.id },
+                    data: { status: "FAILED" },
+                });
+                // Order still created — user can retry payment later
+            }
         }
 
         return res.status(201).json({
@@ -289,7 +300,7 @@ export async function getOrders(req, res) {
 
         return res.status(200).json({
             success: true,
-            orders,
+            orders: orders.map(withOrderItemImages),
             pagination: {
                 total,
                 page: pageNum,
@@ -299,6 +310,89 @@ export async function getOrders(req, res) {
         });
     } catch (error) {
         console.error("[getOrders]", error);
+        return res.status(500).json({ success: false, message: "Server error." });
+    }
+}
+
+// GET /api/v1/orders/customers
+// Admin only — customers derived from placed orders, grouped by phone number.
+export async function getOrderCustomers(req, res) {
+    try {
+        const { search = "", page = "1", limit = "8" } = req.query;
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+        const query = String(search).trim();
+
+        const where = query
+            ? {
+                OR: [
+                    { firstName: { contains: query, mode: "insensitive" } },
+                    { lastName: { contains: query, mode: "insensitive" } },
+                    { email: { contains: query, mode: "insensitive" } },
+                    { phone: { contains: query } },
+                ],
+            }
+            : {};
+
+        const orders = await prisma.order.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                total: true,
+                createdAt: true,
+            },
+        });
+
+        const customersByPhone = new Map();
+
+        for (const order of orders) {
+            const key = order.phone.replace(/\D/g, "") || order.phone;
+            const existing = customersByPhone.get(key);
+
+            if (existing) {
+                existing.orders += 1;
+                existing.total += order.total;
+                if (order.createdAt > existing.lastOrderAt) {
+                    existing.lastOrderAt = order.createdAt;
+                    existing.name = `${order.firstName} ${order.lastName}`;
+                    existing.email = order.email;
+                    existing.phone = order.phone;
+                }
+            } else {
+                customersByPhone.set(key, {
+                    id: key,
+                    name: `${order.firstName} ${order.lastName}`,
+                    email: order.email,
+                    phone: order.phone,
+                    orders: 1,
+                    total: order.total,
+                    lastOrderAt: order.createdAt,
+                });
+            }
+        }
+
+        const customers = Array.from(customersByPhone.values())
+            .sort((a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+        const total = customers.length;
+        const pagedCustomers = customers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+        return res.status(200).json({
+            success: true,
+            customers: pagedCustomers,
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+            },
+        });
+    } catch (error) {
+        console.error("[getOrderCustomers]", error);
         return res.status(500).json({ success: false, message: "Server error." });
     }
 }
@@ -323,7 +417,7 @@ export async function getOrder(req, res) {
             return res.status(404).json({ success: false, message: "Order not found." });
         }
 
-        return res.status(200).json({ success: true, order });
+        return res.status(200).json({ success: true, order: withOrderItemImages(order) });
     } catch (error) {
         console.error("[getOrder]", error);
         return res.status(500).json({ success: false, message: "Server error." });
@@ -361,7 +455,7 @@ export async function trackOrder(req, res) {
             return res.status(404).json({ success: false, message: "No order found matching that reference." });
         }
 
-        return res.status(200).json({ success: true, order });
+        return res.status(200).json({ success: true, order: withOrderItemImages(order) });
     } catch (error) {
         console.error("[trackOrder]", error);
         return res.status(500).json({ success: false, message: "Server error." });

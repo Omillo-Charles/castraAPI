@@ -14,10 +14,35 @@ const BASE_URL =
         ? "https://api.safaricom.co.ke"
         : "https://sandbox.safaricom.co.ke";
 
+function pickMpesaMessage(data) {
+    if (!data || typeof data !== "object") return null;
+
+    return (
+        data.errorMessage ||
+        data.ResponseDescription ||
+        data.error_description ||
+        data.message ||
+        null
+    );
+}
+
+export function getMpesaErrorMessage(error, fallback = "M-Pesa request failed") {
+    if (!axios.isAxiosError(error)) {
+        return error?.message || fallback;
+    }
+
+    const status = error.response?.status;
+    const data = error.response?.data;
+    const message = pickMpesaMessage(data) || error.message || fallback;
+    const details = data ? ` ${JSON.stringify(data)}` : "";
+
+    return `${fallback}${status ? ` (${status})` : ""}: ${message}${details}`;
+}
+
 // Generate OAuth access token
 // Daraja requires a Bearer token on every API call.
 // The token expires in 3600 seconds — we cache it to avoid hammering the auth endpoint.
-let _cachedToken    = null;
+let _cachedToken = null;
 let _tokenExpiresAt = 0;
 
 export async function getMpesaToken() {
@@ -28,11 +53,16 @@ export async function getMpesaToken() {
         `${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`
     ).toString("base64");
 
-    const res = await axios.get(`${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
-        headers: { Authorization: `Basic ${credentials}` },
-    });
+    let res;
+    try {
+        res = await axios.get(`${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+            headers: { Authorization: `Basic ${credentials}` },
+        });
+    } catch (error) {
+        throw new Error(getMpesaErrorMessage(error, "M-Pesa token request failed"));
+    }
 
-    _cachedToken    = res.data.access_token;
+    _cachedToken = res.data.access_token;
     _tokenExpiresAt = now + (res.data.expires_in - 60) * 1000; // refresh 60s before expiry
 
     return _cachedToken;
@@ -42,7 +72,7 @@ export async function getMpesaToken() {
 // timestamp: YYYYMMDDHHmmss
 // password:  base64(shortCode + passkey + timestamp)
 export function getMpesaTimestamp() {
-    const d   = new Date();
+    const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return (
         `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
@@ -62,32 +92,37 @@ export function getMpesaPassword(timestamp) {
 // orderId     : used as the AccountReference and passed back in the callback
 // description : short description shown on the M-Pesa prompt (max 12 chars)
 export async function initiateSTKPush({ amount, phone, orderId, description = "CastraOrder" }) {
-    const token     = await getMpesaToken();
+    const token = await getMpesaToken();
     const timestamp = getMpesaTimestamp();
-    const password  = getMpesaPassword(timestamp);
+    const password = getMpesaPassword(timestamp);
 
     // Normalise phone number → 254XXXXXXXXX
     const normalised = normalisePhone(phone);
 
     const payload = {
         BusinessShortCode: MPESA_BUSINESS_SHORT_CODE,
-        Password:          password,
-        Timestamp:         timestamp,
-        TransactionType:   "CustomerPayBillOnline",
-        Amount:            Math.round(amount),
-        PartyA:            normalised,
-        PartyB:            MPESA_BUSINESS_SHORT_CODE,
-        PhoneNumber:       normalised,
-        CallBackURL:       MPESA_CALLBACK_URL,
-        AccountReference:  String(orderId).slice(0, 12),
-        TransactionDesc:   description.slice(0, 13),
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: "CustomerPayBillOnline",
+        Amount: Math.round(amount),
+        PartyA: normalised,
+        PartyB: MPESA_BUSINESS_SHORT_CODE,
+        PhoneNumber: normalised,
+        CallBackURL: MPESA_CALLBACK_URL,
+        AccountReference: String(orderId).slice(0, 12),
+        TransactionDesc: description.slice(0, 13),
     };
 
-    const res = await axios.post(
-        `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}` } }
-    );
+    let res;
+    try {
+        res = await axios.post(
+            `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
+            payload,
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+    } catch (error) {
+        throw new Error(getMpesaErrorMessage(error, "M-Pesa STK Push failed"));
+    }
 
     return res.data;
     // Returns: { MerchantRequestID, CheckoutRequestID, ResponseCode, ResponseDescription, CustomerMessage }
@@ -96,20 +131,25 @@ export async function initiateSTKPush({ amount, phone, orderId, description = "C
 // STK Push Query (check payment status)
 // Used to poll whether the customer completed the payment.
 export async function querySTKPush(checkoutRequestId) {
-    const token     = await getMpesaToken();
+    const token = await getMpesaToken();
     const timestamp = getMpesaTimestamp();
-    const password  = getMpesaPassword(timestamp);
+    const password = getMpesaPassword(timestamp);
 
-    const res = await axios.post(
-        `${BASE_URL}/mpesa/stkpushquery/v1/query`,
-        {
-            BusinessShortCode: MPESA_BUSINESS_SHORT_CODE,
-            Password:          password,
-            Timestamp:         timestamp,
-            CheckoutRequestID: checkoutRequestId,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-    );
+    let res;
+    try {
+        res = await axios.post(
+            `${BASE_URL}/mpesa/stkpushquery/v1/query`,
+            {
+                BusinessShortCode: MPESA_BUSINESS_SHORT_CODE,
+                Password: password,
+                Timestamp: timestamp,
+                CheckoutRequestID: checkoutRequestId,
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+    } catch (error) {
+        throw new Error(getMpesaErrorMessage(error, "M-Pesa STK query failed"));
+    }
 
     return res.data;
     // ResultCode 0 = success, 1032 = cancelled by user, 1 = insufficient funds etc.
@@ -122,7 +162,7 @@ export async function querySTKPush(checkoutRequestId) {
 export function normalisePhone(phone) {
     const cleaned = String(phone).replace(/\s+/g, "").replace(/^\+/, "");
     if (cleaned.startsWith("254")) return cleaned;
-    if (cleaned.startsWith("0"))   return `254${cleaned.slice(1)}`;
+    if (cleaned.startsWith("0")) return `254${cleaned.slice(1)}`;
     if (cleaned.startsWith("7") || cleaned.startsWith("1")) return `254${cleaned}`;
     throw new Error(`Invalid Kenyan phone number: ${phone}`);
 }
@@ -133,20 +173,33 @@ export function parseSTKCallback(body) {
     if (!stk) return null;
 
     const resultCode = stk.ResultCode;
-    const success    = resultCode === 0;
+    const success = Number(resultCode) === 0;
 
     const items = stk.CallbackMetadata?.Item ?? [];
-    const get   = (name) => items.find((i) => i.Name === name)?.Value ?? null;
+    const get = (name) => items.find((i) => i.Name === name)?.Value ?? null;
 
     return {
         success,
         resultCode,
-        resultDesc:          stk.ResultDesc,
-        merchantRequestId:   stk.MerchantRequestID,
-        checkoutRequestId:   stk.CheckoutRequestID,
-        mpesaReceiptNumber:  get("MpesaReceiptNumber"),
-        transactionDate:     get("TransactionDate"),
-        phoneNumber:         get("PhoneNumber"),
-        amount:              get("Amount"),
+        resultDesc: stk.ResultDesc,
+        merchantRequestId: stk.MerchantRequestID,
+        checkoutRequestId: stk.CheckoutRequestID,
+        mpesaReceiptNumber: get("MpesaReceiptNumber"),
+        transactionDate: get("TransactionDate"),
+        phoneNumber: get("PhoneNumber"),
+        amount: get("Amount"),
     };
 }
+
+const mpesa = {
+    getMpesaToken,
+    getMpesaTimestamp,
+    getMpesaPassword,
+    getMpesaErrorMessage,
+    initiateSTKPush,
+    querySTKPush,
+    normalisePhone,
+    parseSTKCallback,
+};
+
+export default mpesa;

@@ -3,6 +3,7 @@ import {
     placeOrder,
     getOrders,
     getOrder,
+    getOrderCustomers,
     trackOrder,
     updateOrderStatus,
 } from "../controllers/order.controller.js";
@@ -17,6 +18,7 @@ orderRouter.get("/track", trackOrder);
 // ── Authenticated users ───────────────────────────────────────────────────────
 orderRouter.post("/",            requireAuth,               placeOrder);
 orderRouter.get("/",             requireAuth,               getOrders);
+orderRouter.get("/customers",    requireAuth, requireAdmin, getOrderCustomers);
 orderRouter.get("/:idOrRef",     requireAuth,               getOrder);
 
 // ── Admin only ────────────────────────────────────────────────────────────────
