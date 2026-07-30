@@ -30,8 +30,8 @@ async function getOrCreateCart(userId) {
 // Helper: compute cart totals
 function computeTotals(cart) {
     const baseSubtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
-    const deliveryFee = cart.items.reduce((sum, item) => sum + (item.product.deliveryFee ?? 0) * item.qty, 0);
-    const subtotal = baseSubtotal + deliveryFee;
+    const deliveryFee = 0;
+    const subtotal = baseSubtotal;
     const discount = cart.discount ?? 0;
     const total = subtotal - discount;
     return { subtotal, discount, deliveryFee, total };

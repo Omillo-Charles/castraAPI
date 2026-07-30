@@ -122,8 +122,8 @@ export async function placeOrder(req, res) {
 
         // ── Compute totals ──
         const baseSubtotal = cart.items.reduce((s, i) => s + i.product.price * i.qty, 0);
-        const deliveryFee = cart.items.reduce((s, i) => s + (i.product.deliveryFee ?? 0) * i.qty, 0);
-        const subtotal = baseSubtotal + deliveryFee;
+        const deliveryFee = 0;
+        const subtotal = baseSubtotal;
         const discount = cart.discount ?? 0;
         const total = subtotal - discount;
 

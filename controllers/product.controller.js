@@ -88,7 +88,7 @@ export async function getProductById(req, res) {
 // Files:  images (up to 5)
 export async function createProduct(req, res) {
     try {
-        const { name, category, slug, price, originalPrice, deliveryFee, stock, active } = req.body;
+        const { name, category, slug, price, originalPrice, stock, active } = req.body;
 
         if (!name || !category || !slug || !price || !stock) {
             return res.status(400).json({
@@ -112,7 +112,7 @@ export async function createProduct(req, res) {
                 category,
                 slug,
                 price: parseInt(price),
-                deliveryFee: deliveryFee ? parseInt(deliveryFee) : 0,
+                deliveryFee: 0,
                 originalPrice: originalPrice ? parseInt(originalPrice) : null,
                 stock: parseInt(stock),
                 inStock: parseInt(stock) > 0,
@@ -135,7 +135,7 @@ export async function updateProduct(req, res) {
     try {
         const { id } = req.params;
         const {
-            name, category, slug, price, originalPrice, deliveryFee,
+            name, category, slug, price, originalPrice,
             stock, active, replaceImages,
         } = req.body;
 
@@ -149,7 +149,6 @@ export async function updateProduct(req, res) {
         if (category !== undefined) data.category = category;
         if (slug !== undefined) data.slug = slug;
         if (price !== undefined) { data.price = parseInt(price); }
-        if (deliveryFee !== undefined) { data.deliveryFee = deliveryFee ? parseInt(deliveryFee) : 0; }
         if (originalPrice !== undefined) { data.originalPrice = originalPrice ? parseInt(originalPrice) : null; }
         if (stock !== undefined) {
             data.stock = parseInt(stock);
