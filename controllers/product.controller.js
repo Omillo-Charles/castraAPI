@@ -22,9 +22,9 @@ export async function getProducts(req, res) {
     try {
         const { category, page = "1", limit = "8", sort, search } = req.query;
 
-        const pageNum  = Math.max(1, parseInt(page));
+        const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-        const skip     = (pageNum - 1) * limitNum;
+        const skip = (pageNum - 1) * limitNum;
 
         const where = { active: true };
         if (category) {
@@ -39,9 +39,9 @@ export async function getProducts(req, res) {
             where.name = { contains: search, mode: "insensitive" };
         }
 
-        const orderBy = sort === "price-asc"  ? { price: "asc" }
-                      : sort === "price-desc" ? { price: "desc" }
-                      : { createdAt: "desc" };
+        const orderBy = sort === "price-asc" ? { price: "asc" }
+            : sort === "price-desc" ? { price: "desc" }
+                : { createdAt: "desc" };
 
         const [products, total] = await Promise.all([
             prisma.product.findMany({ where, orderBy, skip, take: limitNum }),
@@ -53,8 +53,8 @@ export async function getProducts(req, res) {
             products,
             pagination: {
                 total,
-                page:       pageNum,
-                limit:      limitNum,
+                page: pageNum,
+                limit: limitNum,
                 totalPages: Math.ceil(total / limitNum),
             },
         });
@@ -88,7 +88,7 @@ export async function getProductById(req, res) {
 // Files:  images (up to 5)
 export async function createProduct(req, res) {
     try {
-        const { name, category, slug, price, originalPrice, stock, active } = req.body;
+        const { name, category, slug, price, originalPrice, deliveryFee, stock, active } = req.body;
 
         if (!name || !category || !slug || !price || !stock) {
             return res.status(400).json({
@@ -111,12 +111,13 @@ export async function createProduct(req, res) {
                 name,
                 category,
                 slug,
-                price:         parseInt(price),
+                price: parseInt(price),
+                deliveryFee: deliveryFee ? parseInt(deliveryFee) : 0,
                 originalPrice: originalPrice ? parseInt(originalPrice) : null,
-                stock:         parseInt(stock),
-                inStock:       parseInt(stock) > 0,
-                active:        active === "false" ? false : true,
-                images:        imageUrls,
+                stock: parseInt(stock),
+                inStock: parseInt(stock) > 0,
+                active: active === "false" ? false : true,
+                images: imageUrls,
             },
         });
 
@@ -134,7 +135,7 @@ export async function updateProduct(req, res) {
     try {
         const { id } = req.params;
         const {
-            name, category, slug, price, originalPrice,
+            name, category, slug, price, originalPrice, deliveryFee,
             stock, active, replaceImages,
         } = req.body;
 
@@ -144,13 +145,14 @@ export async function updateProduct(req, res) {
         }
 
         const data = {};
-        if (name          !== undefined) data.name          = name;
-        if (category      !== undefined) data.category      = category;
-        if (slug          !== undefined) data.slug          = slug;
-        if (price         !== undefined) { data.price       = parseInt(price); }
+        if (name !== undefined) data.name = name;
+        if (category !== undefined) data.category = category;
+        if (slug !== undefined) data.slug = slug;
+        if (price !== undefined) { data.price = parseInt(price); }
+        if (deliveryFee !== undefined) { data.deliveryFee = deliveryFee ? parseInt(deliveryFee) : 0; }
         if (originalPrice !== undefined) { data.originalPrice = originalPrice ? parseInt(originalPrice) : null; }
-        if (stock         !== undefined) {
-            data.stock   = parseInt(stock);
+        if (stock !== undefined) {
+            data.stock = parseInt(stock);
             data.inStock = parseInt(stock) > 0;
         }
         if (active !== undefined) data.active = active === "false" ? false : true;
@@ -224,7 +226,7 @@ export async function toggleProductActive(req, res) {
 
         const product = await prisma.product.update({
             where: { id },
-            data:  { active: !existing.active },
+            data: { active: !existing.active },
         });
 
         return res.status(200).json({ success: true, product });

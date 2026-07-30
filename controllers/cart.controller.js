@@ -3,7 +3,7 @@ import prisma from "../database/neon.js";
 // Helper: get or create a cart for the user
 async function getOrCreateCart(userId) {
     let cart = await prisma.cart.findUnique({
-        where:   { userId },
+        where: { userId },
         include: {
             items: {
                 include: { product: true },
@@ -14,7 +14,7 @@ async function getOrCreateCart(userId) {
 
     if (!cart) {
         cart = await prisma.cart.create({
-            data:    { userId },
+            data: { userId },
             include: {
                 items: {
                     include: { product: true },
@@ -29,10 +29,11 @@ async function getOrCreateCart(userId) {
 
 // Helper: compute cart totals
 function computeTotals(cart) {
-    const subtotal    = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
-    const discount    = cart.discount ?? 0;
-    const deliveryFee = subtotal > 0 ? 350 : 0;
-    const total       = subtotal - discount + deliveryFee;
+    const baseSubtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
+    const deliveryFee = cart.items.reduce((sum, item) => sum + (item.product.deliveryFee ?? 0) * item.qty, 0);
+    const subtotal = baseSubtotal + deliveryFee;
+    const discount = cart.discount ?? 0;
+    const total = subtotal - discount;
     return { subtotal, discount, deliveryFee, total };
 }
 
@@ -40,7 +41,7 @@ function computeTotals(cart) {
 // Returns the user's cart with all items and totals.
 export async function getCart(req, res) {
     try {
-        const cart   = await getOrCreateCart(req.user.id);
+        const cart = await getOrCreateCart(req.user.id);
         const totals = computeTotals(cart);
 
         return res.status(200).json({ success: true, cart: { ...cart, ...totals } });
@@ -73,20 +74,20 @@ export async function addItem(req, res) {
 
         // Upsert: increment qty if item already in cart
         const existing = cart.items.find(i => i.productId === productId);
-        const newQty   = (existing?.qty ?? 0) + Number(qty);
+        const newQty = (existing?.qty ?? 0) + Number(qty);
 
         if (newQty > product.stock) {
             return res.status(400).json({ success: false, message: "Requested quantity exceeds available stock." });
         }
 
         await prisma.cartItem.upsert({
-            where:  { cartId_productId: { cartId: cart.id, productId } },
+            where: { cartId_productId: { cartId: cart.id, productId } },
             update: { qty: newQty },
             create: { cartId: cart.id, productId, qty: Number(qty) },
         });
 
         const updated = await getOrCreateCart(req.user.id);
-        const totals  = computeTotals(updated);
+        const totals = computeTotals(updated);
 
         return res.status(200).json({ success: true, cart: { ...updated, ...totals } });
     } catch (error) {
@@ -101,7 +102,7 @@ export async function addItem(req, res) {
 export async function updateItem(req, res) {
     try {
         const { productId } = req.params;
-        const qty           = Number(req.body.qty);
+        const qty = Number(req.body.qty);
 
         if (isNaN(qty) || qty < 0) {
             return res.status(400).json({ success: false, message: "qty must be a non-negative number." });
@@ -125,7 +126,7 @@ export async function updateItem(req, res) {
         }
 
         const updated = await getOrCreateCart(req.user.id);
-        const totals  = computeTotals(updated);
+        const totals = computeTotals(updated);
 
         return res.status(200).json({ success: true, cart: { ...updated, ...totals } });
     } catch (error) {
@@ -139,8 +140,8 @@ export async function updateItem(req, res) {
 export async function removeItem(req, res) {
     try {
         const { productId } = req.params;
-        const cart          = await getOrCreateCart(req.user.id);
-        const item          = cart.items.find(i => i.productId === productId);
+        const cart = await getOrCreateCart(req.user.id);
+        const item = cart.items.find(i => i.productId === productId);
 
         if (!item) {
             return res.status(404).json({ success: false, message: "Item not in cart." });
@@ -149,7 +150,7 @@ export async function removeItem(req, res) {
         await prisma.cartItem.delete({ where: { id: item.id } });
 
         const updated = await getOrCreateCart(req.user.id);
-        const totals  = computeTotals(updated);
+        const totals = computeTotals(updated);
 
         return res.status(200).json({ success: true, cart: { ...updated, ...totals } });
     } catch (error) {
@@ -167,7 +168,7 @@ export async function clearCart(req, res) {
         await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
         await prisma.cart.update({
             where: { id: cart.id },
-            data:  { couponCode: null, discount: 0 },
+            data: { couponCode: null, discount: 0 },
         });
 
         return res.status(200).json({ success: true, message: "Cart cleared." });

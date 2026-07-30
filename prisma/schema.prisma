@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Enums
@@ -36,22 +36,22 @@ enum PaymentStatus {
 // User 
 
 model User {
-  id            String     @id @default(cuid())
+  id            String   @id @default(cuid())
   firstName     String
   lastName      String
-  email         String     @unique
+  email         String   @unique
   phone         String?
-  password      String?    // null for Google OAuth users
-  googleId      String?    @unique
-  role          Role       @default(USER)
-  emailVerified Boolean    @default(false)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  password      String? // null for Google OAuth users
+  googleId      String?  @unique
+  role          Role     @default(USER)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  addresses     Address[]
-  cart          Cart?
-  wishlist      Wishlist?
-  orders        Order[]
+  addresses Address[]
+  cart      Cart?
+  wishlist  Wishlist?
+  orders    Order[]
 
   @@map("users")
 }
@@ -61,7 +61,7 @@ model User {
 model Address {
   id        String   @id @default(cuid())
   userId    String
-  label     String   // e.g. "Home", "Office"
+  label     String // e.g. "Home", "Office"
   street    String
   city      String
   county    String
@@ -69,8 +69,8 @@ model Address {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders    Order[]
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
 
   @@map("addresses")
 }
@@ -78,18 +78,19 @@ model Address {
 // Product 
 
 model Product {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String
   category      String
   slug          String
-  price         Int         // stored in KES (smallest unit — whole shillings)
-  originalPrice Int?        // for showing crossed-out prices
-  stock         Int         @default(0)
-  inStock       Boolean     @default(true)
-  active        Boolean     @default(true)
-  images        String[]    // array of image URLs
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  price         Int // stored in KES (smallest unit — whole shillings)
+  deliveryFee   Int      @default(0) // delivery fee charged per product in KES
+  originalPrice Int? // for showing crossed-out prices
+  stock         Int      @default(0)
+  inStock       Boolean  @default(true)
+  active        Boolean  @default(true)
+  images        String[] // array of image URLs
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
@@ -101,15 +102,15 @@ model Product {
 // Cart 
 
 model Cart {
-  id          String     @id @default(cuid())
-  userId      String     @unique
-  couponCode  String?
-  discount    Int?       // discount amount in KES
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  couponCode String?
+  discount   Int? // discount amount in KES
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items       CartItem[]
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
 
   @@map("carts")
 }
@@ -122,8 +123,8 @@ model CartItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([cartId, productId])
   @@map("cart_items")
@@ -132,12 +133,12 @@ model CartItem {
 // Wishlist 
 
 model Wishlist {
-  id        String         @id @default(cuid())
-  userId    String         @unique
-  createdAt DateTime       @default(now())
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
 
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     WishlistItem[]
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items WishlistItem[]
 
   @@map("wishlists")
 }
@@ -148,8 +149,8 @@ model WishlistItem {
   productId  String
   createdAt  DateTime @default(now())
 
-  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([wishlistId, productId])
   @@map("wishlist_items")
@@ -158,51 +159,51 @@ model WishlistItem {
 // Order 
 
 model Order {
-  id          String      @id @default(cuid())
-  ref         String      @unique // e.g. CST-20250727-0041
-  userId      String?     // null for guest orders
-  addressId   String?     // null if address was entered manually (not saved)
+  id        String  @id @default(cuid())
+  ref       String  @unique // e.g. CST-20250727-0041
+  userId    String? // null for guest orders
+  addressId String? // null if address was entered manually (not saved)
 
   // Contact snapshot (captured at checkout, survives address edits)
-  firstName   String
-  lastName    String
-  email       String?
-  phone       String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
 
   // Delivery snapshot
-  street      String
-  city        String
-  county      String
-  notes       String?
+  street String
+  city   String
+  county String
+  notes  String?
 
   // Totals
-  subtotal    Int         // in KES
-  deliveryFee Int         // in KES
-  discount    Int         @default(0)
-  total       Int         // in KES
+  subtotal    Int // in KES
+  deliveryFee Int // in KES
+  discount    Int @default(0)
+  total       Int // in KES
 
-  status      OrderStatus @default(CONFIRMED)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  status    OrderStatus @default(CONFIRMED)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  items       OrderItem[]
-  payment     Payment?
+  user    User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  address Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  items   OrderItem[]
+  payment Payment?
 
   @@map("orders")
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   orderId   String
-  productId String?  // nullable — product may be deleted later
-  name      String   // snapshot of product name at time of order
-  price     Int      // snapshot of price at time of order
+  productId String? // nullable — product may be deleted later
+  name      String // snapshot of product name at time of order
+  price     Int // snapshot of price at time of order
   qty       Int
 
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
 }
@@ -210,21 +211,21 @@ model OrderItem {
 // Payment 
 
 model Payment {
-  id                 String        @id @default(cuid())
-  orderId            String        @unique
-  method             PaymentMethod
-  status             PaymentStatus @default(PENDING)
-  amount             Int           // in KES
+  id      String        @id @default(cuid())
+  orderId String        @unique
+  method  PaymentMethod
+  status  PaymentStatus @default(PENDING)
+  amount  Int // in KES
 
   // M-Pesa STK Push
-  stkPhone           String?       // phone number the prompt was sent to
-  checkoutRequestId  String?       // Daraja CheckoutRequestID for polling
-  mpesaReceiptNumber String?       // receipt from Daraja callback
+  stkPhone           String? // phone number the prompt was sent to
+  checkoutRequestId  String? // Daraja CheckoutRequestID for polling
+  mpesaReceiptNumber String? // receipt from Daraja callback
 
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  order              Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }

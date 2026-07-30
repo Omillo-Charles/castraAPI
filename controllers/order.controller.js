@@ -121,10 +121,11 @@ export async function placeOrder(req, res) {
         }
 
         // ── Compute totals ──
-        const subtotal = cart.items.reduce((s, i) => s + i.product.price * i.qty, 0);
-        const deliveryFee = 350;
+        const baseSubtotal = cart.items.reduce((s, i) => s + i.product.price * i.qty, 0);
+        const deliveryFee = cart.items.reduce((s, i) => s + (i.product.deliveryFee ?? 0) * i.qty, 0);
+        const subtotal = baseSubtotal + deliveryFee;
         const discount = cart.discount ?? 0;
-        const total = subtotal - discount + deliveryFee;
+        const total = subtotal - discount;
 
         // ── Create order in a transaction ──
         const order = await prisma.$transaction(async (tx) => {
