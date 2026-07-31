@@ -103,13 +103,14 @@ model Product {
 
 model Cart {
   id         String   @id @default(cuid())
-  userId     String   @unique
+  userId     String?  @unique   // null for guest carts
+  sessionId  String?  @unique   // set for guests, null for authenticated users
   couponCode String?
-  discount   Int? // discount amount in KES
+  discount   Int?               // discount amount in KES
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   items CartItem[]
 
   @@map("carts")
@@ -162,6 +163,7 @@ model Order {
   id        String  @id @default(cuid())
   ref       String  @unique // e.g. CST-20250727-0041
   userId    String? // null for guest orders
+  sessionId String? // set for guest orders so they can be looked up by session
   addressId String? // null if address was entered manually (not saved)
 
   // Contact snapshot (captured at checkout, survives address edits)

@@ -1,16 +1,27 @@
 import prisma from "../database/neon.js";
 import { AppError } from "../middlewares/error.js";
 
-async function getOrCreateCart(userId) {
-    let cart = await prisma.cart.findUnique({
-        where:   { userId },
-        include: { items: { include: { product: true }, orderBy: { createdAt: "asc" } } },
-    });
+// Cart lookup helpers
+
+const CART_INCLUDE = {
+    items: { include: { product: true }, orderBy: { createdAt: "asc" } },
+};
+
+// Find or create a cart for either an authenticated user or a guest session.
+// cartOwner: { type: "user"|"guest", userId?: string, sessionId?: string }
+async function getOrCreateCart(cartOwner) {
+    const where = cartOwner.type === "user"
+        ? { userId:    cartOwner.userId }
+        : { sessionId: cartOwner.sessionId };
+
+    let cart = await prisma.cart.findUnique({ where, include: CART_INCLUDE });
 
     if (!cart) {
         cart = await prisma.cart.create({
-            data:    { userId },
-            include: { items: { include: { product: true }, orderBy: { createdAt: "asc" } } },
+            data:    cartOwner.type === "user"
+                ? { userId: cartOwner.userId }
+                : { sessionId: cartOwner.sessionId },
+            include: CART_INCLUDE,
         });
     }
 
@@ -25,10 +36,10 @@ function computeTotals(cart) {
     return { subtotal, discount, deliveryFee, total };
 }
 
-// GET /api/v1/cart
+// GET /api/v1/cart 
 export async function getCart(req, res, next) {
     try {
-        const cart   = await getOrCreateCart(req.user.id);
+        const cart   = await getOrCreateCart(req.cartOwner);
         const totals = computeTotals(cart);
         return res.status(200).json({ success: true, cart: { ...cart, ...totals } });
     } catch (error) {
@@ -45,7 +56,7 @@ export async function addItem(req, res, next) {
         if (!product || !product.active) throw new AppError("Product not found or unavailable.", 404);
         if (!product.inStock || product.stock < qty) throw new AppError("Insufficient stock.", 400);
 
-        const cart     = await getOrCreateCart(req.user.id);
+        const cart     = await getOrCreateCart(req.cartOwner);
         const existing = cart.items.find(i => i.productId === productId);
         const newQty   = (existing?.qty ?? 0) + Number(qty);
 
@@ -57,7 +68,7 @@ export async function addItem(req, res, next) {
             create: { cartId: cart.id, productId, qty: Number(qty) },
         });
 
-        const updated = await getOrCreateCart(req.user.id);
+        const updated = await getOrCreateCart(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
@@ -70,7 +81,7 @@ export async function updateItem(req, res, next) {
         const { productId } = req.params;
         const qty           = Number(req.body.qty);
 
-        const cart = await getOrCreateCart(req.user.id);
+        const cart = await getOrCreateCart(req.cartOwner);
         const item = cart.items.find(i => i.productId === productId);
         if (!item) throw new AppError("Item not in cart.", 404);
 
@@ -82,7 +93,7 @@ export async function updateItem(req, res, next) {
             await prisma.cartItem.update({ where: { id: item.id }, data: { qty } });
         }
 
-        const updated = await getOrCreateCart(req.user.id);
+        const updated = await getOrCreateCart(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
@@ -93,13 +104,13 @@ export async function updateItem(req, res, next) {
 export async function removeItem(req, res, next) {
     try {
         const { productId } = req.params;
-        const cart          = await getOrCreateCart(req.user.id);
+        const cart          = await getOrCreateCart(req.cartOwner);
         const item          = cart.items.find(i => i.productId === productId);
         if (!item) throw new AppError("Item not in cart.", 404);
 
         await prisma.cartItem.delete({ where: { id: item.id } });
 
-        const updated = await getOrCreateCart(req.user.id);
+        const updated = await getOrCreateCart(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
@@ -109,7 +120,7 @@ export async function removeItem(req, res, next) {
 // DELETE /api/v1/cart
 export async function clearCart(req, res, next) {
     try {
-        const cart = await getOrCreateCart(req.user.id);
+        const cart = await getOrCreateCart(req.cartOwner);
         await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
         await prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null, discount: 0 } });
         return res.status(200).json({ success: true, message: "Cart cleared." });

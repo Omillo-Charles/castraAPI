@@ -5,7 +5,7 @@ import { buildUserOrderEmail, buildAdminOrderEmail, buildOrderStatusEmail } from
 import { FRONTEND_URL, ADMIN_EMAIL } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers 
 
 function generateRef() {
     const now  = new Date();
@@ -43,14 +43,20 @@ function withOrderItemImages(order) {
     };
 }
 
-// ─── POST /api/v1/orders ───────────────────────────────────────────────────────
+// POST /api/v1/orders
 export async function placeOrder(req, res, next) {
     try {
         const { contact, delivery, payment: paymentData } = req.body;
 
-        // ── Cart ──
+        // ── Resolve cart owner (user or guest) ──
+        const owner     = req.cartOwner;
+        const cartWhere = owner.type === "user"
+            ? { userId:    owner.userId }
+            : { sessionId: owner.sessionId };
+
+        // ── Fetch cart ──
         const cart = await prisma.cart.findUnique({
-            where:   { userId: req.user.id },
+            where:   cartWhere,
             include: { items: { include: { product: true } } },
         });
 
@@ -78,8 +84,9 @@ export async function placeOrder(req, res, next) {
         const order = await prisma.$transaction(async (tx) => {
             const created = await tx.order.create({
                 data: {
-                    ref:        generateRef(),
-                    userId:     req.user.id,
+                    ref:       generateRef(),
+                    userId:    owner.type === "user" ? owner.userId : null,
+                    sessionId: owner.type === "guest" ? owner.sessionId : null,
                     firstName:  contact.firstName,
                     lastName:   contact.lastName,
                     email:      contact.email ?? null,
@@ -171,7 +178,7 @@ export async function placeOrder(req, res, next) {
         }));
         const orderUrl = `${FRONTEND_URL}/track-order?q=${order.ref}`;
 
-        const recipientEmail = contact.email ?? req.user.email ?? null;
+        const recipientEmail = contact.email ?? (owner.type === "user" ? req.user?.email : null) ?? null;
         if (recipientEmail) {
             sendMail({ to: recipientEmail, ...buildUserOrderEmail({ customerName: contact.firstName, orderId: order.ref, items: orderItems, total, orderUrl }) })
                 .catch((e) => console.error("[placeOrder] user email failed:", e.message));
@@ -182,7 +189,7 @@ export async function placeOrder(req, res, next) {
                 to: ADMIN_EMAIL,
                 ...buildAdminOrderEmail({
                     customerName:    `${contact.firstName} ${contact.lastName}`,
-                    customerEmail:   contact.email ?? req.user.email ?? "",
+                    customerEmail:   contact.email ?? (owner.type === "user" ? req.user?.email : null) ?? "",
                     customerPhone:   contact.phone,
                     orderId:         order.ref,
                     items:           orderItems,
@@ -216,7 +223,7 @@ export async function placeOrder(req, res, next) {
     }
 }
 
-// ─── GET /api/v1/orders ────────────────────────────────────────────────────────
+// GET /api/v1/orders
 export async function getOrders(req, res, next) {
     try {
         const isAdmin  = req.user.role === "ADMIN";
@@ -253,7 +260,7 @@ export async function getOrders(req, res, next) {
     }
 }
 
-// ─── GET /api/v1/orders/customers ─────────────────────────────────────────────
+// GET /api/v1/orders/customers
 export async function getOrderCustomers(req, res, next) {
     try {
         const { search = "", page = "1", limit = "8" } = req.query;
@@ -308,7 +315,7 @@ export async function getOrderCustomers(req, res, next) {
     }
 }
 
-// ─── GET /api/v1/orders/:idOrRef ──────────────────────────────────────────────
+// GET /api/v1/orders/:idOrRef
 export async function getOrder(req, res, next) {
     try {
         const { idOrRef } = req.params;
@@ -326,7 +333,7 @@ export async function getOrder(req, res, next) {
     }
 }
 
-// ─── GET /api/v1/orders/track ─────────────────────────────────────────────────
+// GET /api/v1/orders/track
 export async function trackOrder(req, res, next) {
     try {
         const { q } = req.query;
@@ -349,7 +356,7 @@ export async function trackOrder(req, res, next) {
     }
 }
 
-// ─── PATCH /api/v1/orders/:id/status ─────────────────────────────────────────
+// PATCH /api/v1/orders/:id/status
 export async function updateOrderStatus(req, res, next) {
     try {
         const { id }     = req.params;
