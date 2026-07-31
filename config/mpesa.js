@@ -14,6 +14,10 @@ const BASE_URL =
         ? "https://api.safaricom.co.ke"
         : "https://sandbox.safaricom.co.ke";
 
+// Maximum time (ms) to wait for any Safaricom API response.
+// Without this, a stalled upstream hangs the request handler indefinitely.
+const MPESA_TIMEOUT_MS = 15000;
+
 function pickMpesaMessage(data) {
     if (!data || typeof data !== "object") return null;
 
@@ -31,8 +35,13 @@ export function getMpesaErrorMessage(error, fallback = "M-Pesa request failed") 
         return error?.message || fallback;
     }
 
-    const status = error.response?.status;
-    const data = error.response?.data;
+    // Axios timeout — code is ECONNABORTED for timeout, ECONNRESET for dropped conn
+    if (error.code === "ECONNABORTED" || error.code === "ECONNRESET") {
+        return `${fallback}: Safaricom API did not respond in time. Please try again.`;
+    }
+
+    const status  = error.response?.status;
+    const data    = error.response?.data;
     const message = pickMpesaMessage(data) || error.message || fallback;
     const details = data ? ` ${JSON.stringify(data)}` : "";
 
@@ -57,6 +66,7 @@ export async function getMpesaToken() {
     try {
         res = await axios.get(`${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
             headers: { Authorization: `Basic ${credentials}` },
+            timeout: MPESA_TIMEOUT_MS,
         });
     } catch (error) {
         throw new Error(getMpesaErrorMessage(error, "M-Pesa token request failed"));
@@ -69,14 +79,20 @@ export async function getMpesaToken() {
 }
 
 // Generate STK Push timestamp and password
-// timestamp: YYYYMMDDHHmmss
+// timestamp: YYYYMMDDHHmmss in EAT (UTC+3)
 // password:  base64(shortCode + passkey + timestamp)
+// Daraja validates the password against its own EAT clock. Using the server's
+// local time is unreliable — if the container/VM isn't set to Africa/Nairobi the
+// hash will be wrong and STK Push silently fails with an auth error.
+// We derive EAT explicitly from UTC so the result is correct on any server.
 export function getMpesaTimestamp() {
-    const d = new Date();
+    const EAT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3
+    const eat = new Date(Date.now() + EAT_OFFSET_MS);
     const pad = (n) => String(n).padStart(2, "0");
+
     return (
-        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
-        `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+        `${eat.getUTCFullYear()}${pad(eat.getUTCMonth() + 1)}${pad(eat.getUTCDate())}` +
+        `${pad(eat.getUTCHours())}${pad(eat.getUTCMinutes())}${pad(eat.getUTCSeconds())}`
     );
 }
 
@@ -118,7 +134,7 @@ export async function initiateSTKPush({ amount, phone, orderId, description = "C
         res = await axios.post(
             `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
             payload,
-            { headers: { Authorization: `Bearer ${token}` } }
+            { headers: { Authorization: `Bearer ${token}` }, timeout: MPESA_TIMEOUT_MS }
         );
     } catch (error) {
         throw new Error(getMpesaErrorMessage(error, "M-Pesa STK Push failed"));
@@ -141,11 +157,11 @@ export async function querySTKPush(checkoutRequestId) {
             `${BASE_URL}/mpesa/stkpushquery/v1/query`,
             {
                 BusinessShortCode: MPESA_BUSINESS_SHORT_CODE,
-                Password: password,
-                Timestamp: timestamp,
+                Password:          password,
+                Timestamp:         timestamp,
                 CheckoutRequestID: checkoutRequestId,
             },
-            { headers: { Authorization: `Bearer ${token}` } }
+            { headers: { Authorization: `Bearer ${token}` }, timeout: MPESA_TIMEOUT_MS }
         );
     } catch (error) {
         throw new Error(getMpesaErrorMessage(error, "M-Pesa STK query failed"));
