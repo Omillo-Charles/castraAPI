@@ -29,4 +29,6 @@ export const {
     MAIL_FROM_NAME,
     MAIL_FROM_EMAIL,
     ADMIN_EMAIL,
+    UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN,
 } = process.env;

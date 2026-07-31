@@ -1,5 +1,6 @@
 import prisma from "../database/neon.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js";
+import { invalidateProducts } from "../middlewares/cacher.js";
 
 // Extract Cloudinary public_id from a secure URL
 // e.g. "https://res.cloudinary.com/demo/image/upload/v123/castra/products/abc.webp"
@@ -121,6 +122,9 @@ export async function createProduct(req, res) {
             },
         });
 
+        // New product — invalidate the list cache so it appears immediately
+        await invalidateProducts();
+
         return res.status(201).json({ success: true, product });
     } catch (error) {
         console.error("[createProduct]", error);
@@ -179,6 +183,9 @@ export async function updateProduct(req, res) {
 
         const product = await prisma.product.update({ where: { id }, data });
 
+        // Invalidate list cache + this product's single-entry cache
+        await invalidateProducts(id);
+
         return res.status(200).json({ success: true, product });
     } catch (error) {
         console.error("[updateProduct]", error);
@@ -205,6 +212,9 @@ export async function deleteProduct(req, res) {
 
         await prisma.product.delete({ where: { id } });
 
+        // Product gone — purge its cache entries
+        await invalidateProducts(id);
+
         return res.status(200).json({ success: true, message: "Product deleted." });
     } catch (error) {
         console.error("[deleteProduct]", error);
@@ -227,6 +237,9 @@ export async function toggleProductActive(req, res) {
             where: { id },
             data: { active: !existing.active },
         });
+
+        // Visibility changed — a toggled product appears/disappears in the list
+        await invalidateProducts(id);
 
         return res.status(200).json({ success: true, product });
     } catch (error) {
