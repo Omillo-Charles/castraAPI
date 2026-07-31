@@ -1,5 +1,8 @@
 import prisma from "../database/neon.js";
 import mpesa from "../config/mpesa.js";
+import { sendMail } from "../config/nodemailer.js";
+import { buildPaymentStatusEmail } from "../utils/emailTemplates.js";
+import { FRONTEND_URL } from "../config/env.js";
 
 // Initiate M-Pesa STK Push
 // POST /api/v1/payments/stkpush
@@ -128,6 +131,50 @@ export async function updatePaymentStatus(req, res) {
                 mpesaReceiptNumber: mpesaReceiptNumber?.trim() || payment.mpesaReceiptNumber,
             },
         });
+
+        // ── Notify the customer ──
+        // Fetch the linked order + customer email to send the email
+        const order = await prisma.order.findUnique({
+            where: { id: payment.orderId },
+            select: {
+                ref:       true,
+                firstName: true,
+                email:     true,
+                total:     true,
+                items: {
+                    select: {
+                        name:  true,
+                        qty:   true,
+                        price: true,
+                        product: { select: { images: true } },
+                    },
+                },
+            },
+        });
+
+        if (order?.email) {
+            try {
+                await sendMail({
+                    to: order.email,
+                    ...buildPaymentStatusEmail({
+                        customerName:  order.firstName,
+                        orderId:       order.ref,
+                        paymentStatus: status,
+                        receiptNumber: updatedPayment.mpesaReceiptNumber ?? "",
+                        items:         order.items.map((i) => ({
+                            name:     i.name,
+                            quantity: i.qty,
+                            price:    i.price,
+                            image:    i.product?.images?.[0] ?? null,
+                        })),
+                        total:    order.total,
+                        orderUrl: `${FRONTEND_URL}/track-order?q=${order.ref}`,
+                    }),
+                });
+            } catch (mailError) {
+                console.error("[updatePaymentStatus] Failed to send email:", mailError.message);
+            }
+        }
 
         return res.status(200).json({ success: true, payment: updatedPayment });
     } catch (error) {

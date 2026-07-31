@@ -1,5 +1,8 @@
 import prisma from "../database/neon.js";
 import { initiateSTKPush, normalisePhone } from "../config/mpesa.js";
+import { sendMail } from "../config/nodemailer.js";
+import { buildUserOrderEmail, buildAdminOrderEmail, buildOrderStatusEmail } from "../utils/emailTemplates.js";
+import { FRONTEND_URL, ADMIN_EMAIL } from "../config/env.js";
 
 // Helpers
 
@@ -93,8 +96,8 @@ export async function placeOrder(req, res) {
         if (!delivery?.street || !delivery?.city || !delivery?.county) {
             return res.status(400).json({ success: false, message: "Delivery address (street, city, county) is required." });
         }
-        if (!paymentData?.method || !["mpesa-paybill", "mpesa-stk"].includes(paymentData.method)) {
-            return res.status(400).json({ success: false, message: "payment.method must be 'mpesa-paybill' or 'mpesa-stk'." });
+        if (!paymentData?.method || paymentData.method !== "mpesa-stk") {
+            return res.status(400).json({ success: false, message: "payment.method must be 'mpesa-stk'." });
         }
         if (paymentData.method === "mpesa-stk" && !paymentData.stkPhone) {
             return res.status(400).json({ success: false, message: "payment.stkPhone is required for STK Push." });
@@ -234,6 +237,60 @@ export async function placeOrder(req, res) {
                     data: { status: "FAILED" },
                 });
                 // Order still created — user can retry payment later
+            }
+        }
+
+        // ── Send emails (user + admin) ──
+        const orderItems = cart.items.map((i) => ({
+            name:     i.product.name,
+            quantity: i.qty,
+            price:    i.product.price,
+            image:    i.product.images?.[0] ?? null,
+            category: i.product.category ?? null,
+        }));
+        const orderUrl = `${FRONTEND_URL}/track-order?q=${order.ref}`;
+
+        // User confirmation
+        const recipientEmail = contact.email ?? req.user.email ?? null;
+        if (recipientEmail) {
+            try {
+                await sendMail({
+                    to: recipientEmail,
+                    ...buildUserOrderEmail({
+                        customerName: contact.firstName,
+                        orderId:      order.ref,
+                        items:        orderItems,
+                        total,
+                        orderUrl,
+                    }),
+                });
+            } catch (mailError) {
+                console.error("[placeOrder] Failed to send user email:", mailError.message);
+            }
+        }
+
+        // Admin notification
+        if (ADMIN_EMAIL) {
+            try {
+                await sendMail({
+                    to: ADMIN_EMAIL,
+                    ...buildAdminOrderEmail({
+                        customerName:    `${contact.firstName} ${contact.lastName}`,
+                        customerEmail:   contact.email ?? req.user.email ?? "",
+                        customerPhone:   contact.phone,
+                        orderId:         order.ref,
+                        items:           orderItems,
+                        subtotal,
+                        total,
+                        shippingAddress: `${delivery.street}, ${delivery.city}, ${delivery.county}`,
+                        paymentMethod:   "MPESA_STK",
+                        paymentStatus:   paymentRecord?.status ?? "PENDING",
+                        stkPhone:        paymentData.stkPhone ?? "",
+                        orderUrl,
+                    }),
+                });
+            } catch (mailError) {
+                console.error("[placeOrder] Failed to send admin email:", mailError.message);
             }
         }
 
@@ -489,6 +546,30 @@ export async function updateOrderStatus(req, res) {
             data: { status },
             select: USER_ORDER_SELECT,
         });
+
+        // ── Send status update email to user only ──
+        if (order.email) {
+            try {
+                await sendMail({
+                    to: order.email,
+                    ...buildOrderStatusEmail({
+                        customerName: order.firstName,
+                        orderId:      order.ref,
+                        orderStatus:  status,
+                        items:        order.items.map((i) => ({
+                            name:     i.name,
+                            quantity: i.qty,
+                            price:    i.price,
+                            image:    i.product?.images?.[0] ?? null,
+                        })),
+                        total:    order.total,
+                        orderUrl: `${FRONTEND_URL}/track-order?q=${order.ref}`,
+                    }),
+                });
+            } catch (mailError) {
+                console.error("[updateOrderStatus] Failed to send user email:", mailError.message);
+            }
+        }
 
         return res.status(200).json({ success: true, order });
     } catch (error) {
