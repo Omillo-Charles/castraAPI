@@ -11,6 +11,7 @@ import cartRouter from "./routes/cart.routes.js";
 import wishlistRouter from "./routes/wishlist.routes.js";
 import paymentRouter from "./routes/payment.routes.js";
 import orderRouter from "./routes/order.routes.js";
+import { globalLimiter } from "./middlewares/rateLimiter.js";
 
 import prisma from "./database/neon.js";
 import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
@@ -26,6 +27,9 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
+
+// Global rate limit — applies to every route
+app.use(globalLimiter);
 
 // Initialise passport (no session — we use JWT)
 app.use(passport.initialize());

@@ -2,12 +2,13 @@ import { Router } from "express";
 import passport from "../config/passport.js";
 import { register, login, logout, getMe, googleCallback } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { authLimiter } from "../middlewares/rateLimiter.js";
 
 const authRouter = Router();
 
 //Email / password
-authRouter.post("/register", register);
-authRouter.post("/login",    login);
+authRouter.post("/register", authLimiter, register);
+authRouter.post("/login",    authLimiter, login);
 authRouter.post("/logout",   logout);
 
 //Protected
