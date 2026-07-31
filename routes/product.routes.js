@@ -1,15 +1,9 @@
 import { Router } from "express";
-import {
-    getProducts,
-    getProductById,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-    toggleProductActive,
-} from "../controllers/product.controller.js";
+import { getProducts, getProductById, createProduct, updateProduct, deleteProduct, toggleProductActive } from "../controllers/product.controller.js";
 import { requireAuth, requireAdmin } from "../middlewares/requireAuth.js";
 import { upload } from "../config/cloudinary.js";
 import { cacheResponse, productListKey, productSingleKey, TTL } from "../middlewares/cacher.js";
+import { validate, createProductSchema, updateProductSchema } from "../middlewares/validator.js";
 
 const productRouter = Router();
 
@@ -25,12 +19,13 @@ productRouter.get(
     getProductById
 );
 
-// Admin only — writes always skip cache and trigger invalidation in the controller
+// Admin only — upload runs before validate so req.body is populated from multipart
 productRouter.post(
     "/",
     requireAuth,
     requireAdmin,
     upload.array("images", 5),
+    validate(createProductSchema),
     createProduct
 );
 
@@ -39,6 +34,7 @@ productRouter.patch(
     requireAuth,
     requireAdmin,
     upload.array("images", 5),
+    validate(updateProductSchema),
     updateProduct
 );
 

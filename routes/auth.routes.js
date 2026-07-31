@@ -3,16 +3,14 @@ import passport from "../config/passport.js";
 import { register, login, logout, getMe, googleCallback } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { authLimiter } from "../middlewares/rateLimiter.js";
+import { validate, registerSchema, loginSchema } from "../middlewares/validator.js";
 
 const authRouter = Router();
 
-//Email / password
-authRouter.post("/register", authLimiter, register);
-authRouter.post("/login",    authLimiter, login);
+authRouter.post("/register", authLimiter, validate(registerSchema), register);
+authRouter.post("/login",    authLimiter, validate(loginSchema),    login);
 authRouter.post("/logout",   logout);
-
-//Protected
-authRouter.get("/me", requireAuth, getMe);
+authRouter.get("/me",        requireAuth, getMe);
 
 //Google OAuth
 // Step 1 — redirect user to Google consent screen
