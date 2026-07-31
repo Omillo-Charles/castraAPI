@@ -2,10 +2,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../database/neon.js";
 import { JWT_SECRET, JWT_EXPIRY } from "../config/env.js";
+import { AppError } from "../middlewares/error.js";
 
-// Helpers
-
-// Generate a signed JWT for the given user
 function generateToken(user) {
     return jwt.sign(
         { id: user.id, email: user.email, role: user.role },
@@ -14,224 +12,100 @@ function generateToken(user) {
     );
 }
 
-//Set the JWT as an httpOnly cookie and return it in the response body.
-//httpOnly prevents JS from reading the token — XSS mitigation.
 function sendTokenResponse(res, user, statusCode = 200) {
     const token = generateToken(user);
-
-    const cookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
-    };
-
     const { password: _, ...safeUser } = user;
-
     res.status(statusCode)
-        .cookie("token", token, cookieOptions)
-        .json({
-            success: true,
-            token,
-            user: safeUser,
-        });
+        .cookie("token", token, {
+            httpOnly: true,
+            secure:   process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge:   7 * 24 * 60 * 60 * 1000,
+        })
+        .json({ success: true, token, user: safeUser });
 }
 
-// Register
-
 // POST /api/v1/auth/register
-// Body: { firstName, lastName, email, password, phone? }
-export async function register(req, res) {
+export async function register(req, res, next) {
     try {
         const { firstName, lastName, email, password, phone } = req.body;
 
-        // Validate required fields
-        if (!firstName || !lastName || !email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "First name, last name, email and password are required.",
-            });
-        }
-
-        // Password strength — minimum 8 characters
-        if (password.length < 8) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 8 characters.",
-            });
-        }
-
-        // Check if email already exists
         const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) {
-            return res.status(409).json({
-                success: false,
-                message: "An account with this email already exists.",
-            });
-        }
+        if (existing) throw new AppError("An account with this email already exists.", 409);
 
-        // Hash password
         const hashedPassword = await bcrypt.hash(password, 12);
-
-        // Create user
         const user = await prisma.user.create({
-            data: {
-                firstName,
-                lastName,
-                email,
-                password: hashedPassword,
-                phone: phone || null,
-            },
+            data: { firstName, lastName, email, password: hashedPassword, phone: phone || null },
         });
 
         return sendTokenResponse(res, user, 201);
     } catch (error) {
-        console.error("[register]", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error. Please try again.",
-        });
+        next(error);
     }
 }
 
-//Login
-
 // POST /api/v1/auth/login
-// Body: { email, password }
-export async function login(req, res) {
+export async function login(req, res, next) {
     try {
         const { email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and password are required.",
-            });
-        }
-
-        // Find user — include password for comparison
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password.",
-            });
-        }
+        if (!user) throw new AppError("Invalid email or password.", 401);
 
-        // Google OAuth users have no password
         if (!user.password) {
-            return res.status(401).json({
-                success: false,
-                message: "This account uses Google sign-in. Please continue with Google.",
-            });
+            throw new AppError("This account uses Google sign-in. Please continue with Google.", 401);
         }
 
-        // Compare password
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password.",
-            });
-        }
+        if (!isMatch) throw new AppError("Invalid email or password.", 401);
 
         return sendTokenResponse(res, user);
     } catch (error) {
-        console.error("[login]", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error. Please try again.",
-        });
+        next(error);
     }
 }
 
-// Sign Out
-
 // POST /api/v1/auth/logout
-// Clears the auth cookie.
 export async function logout(req, res) {
     res.clearCookie("token", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure:   process.env.NODE_ENV === "production",
         sameSite: "lax",
     });
-
-    return res.status(200).json({
-        success: true,
-        message: "Signed out successfully.",
-    });
+    return res.status(200).json({ success: true, message: "Signed out successfully." });
 }
 
-// Get current user
-
 // GET /api/v1/auth/me
-// Returns the currently authenticated user.
-// Protected — requires requireAuth middleware.
-export async function getMe(req, res) {
+export async function getMe(req, res, next) {
     try {
         const user = await prisma.user.findUnique({
-            where: { id: req.user.id },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                role: true,
-                emailVerified: true,
-                createdAt: true,
-            },
+            where:  { id: req.user.id },
+            select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, emailVerified: true, createdAt: true },
         });
 
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found.",
-            });
-        }
-
+        if (!user) throw new AppError("User not found.", 404);
         return res.status(200).json({ success: true, user });
     } catch (error) {
-        console.error("[getMe]", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error.",
-        });
+        next(error);
     }
 }
 
-// Google OAuth callback
-
-// GET /api/v1/auth/google/callback
-// Called by passport after Google authenticates the user.
-// Issues JWT, sets cookie, then redirects the browser to the frontend dashboard.
-export async function googleCallback(req, res) {
+// GET /auth/google/callback
+export async function googleCallback(req, res, next) {
     try {
-        const user = req.user; // set by passport after strategy runs
-        if (!user) {
-            return res.redirect(
-                `${process.env.FRONTEND_URL}/account?error=google_failed`
-            );
-        }
+        const user = req.user;
+        if (!user) return res.redirect(`${process.env.FRONTEND_URL}/account?error=google_failed`);
 
         const token = generateToken(user);
+        const dashboard = user.role === "ADMIN" ? "/account/dashboard/admin" : "/account/dashboard";
 
-        const cookieOptions = {
+        res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure:   process.env.NODE_ENV === "production",
             sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        };
-
-        const dashboard =
-            user.role === "ADMIN"
-                ? "/account/dashboard/admin"
-                : "/account/dashboard";
-
-        res.cookie("token", token, cookieOptions)
-           .redirect(`${process.env.FRONTEND_URL}${dashboard}`);
+            maxAge:   7 * 24 * 60 * 60 * 1000,
+        }).redirect(`${process.env.FRONTEND_URL}${dashboard}`);
     } catch (error) {
-        console.error("[googleCallback]", error);
-        res.redirect(`${process.env.FRONTEND_URL}/account?error=server_error`);
+        next(error);
     }
 }

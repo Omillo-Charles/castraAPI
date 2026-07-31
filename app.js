@@ -12,6 +12,7 @@ import wishlistRouter from "./routes/wishlist.routes.js";
 import paymentRouter from "./routes/payment.routes.js";
 import orderRouter from "./routes/order.routes.js";
 import { globalLimiter } from "./middlewares/rateLimiter.js";
+import { errorHandler, notFoundHandler } from "./middlewares/error.js";
 
 import prisma from "./database/neon.js";
 import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
@@ -92,6 +93,10 @@ app.get("/", (req, res) => {
     "body": "Welcome to the Castra Collection ExpressJS Backend API"
   })
 })
+
+// 404 + global error handler — must be last
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 async function connectDB() {
   try {
