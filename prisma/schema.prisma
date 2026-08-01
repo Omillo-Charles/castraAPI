@@ -52,6 +52,7 @@ model User {
   cart      Cart?
   wishlist  Wishlist?
   orders    Order[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
 }
@@ -208,6 +209,21 @@ model OrderItem {
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
+}
+
+// Refresh Tokens
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique  // hashed token stored, raw token sent to client
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
 
 // Payment 

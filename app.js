@@ -1,8 +1,8 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
-import jwt from "jsonwebtoken";
 import passport from "./config/passport.js";
+import { googleCallback } from "./controllers/auth.controller.js";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
 import addressRouter from "./routes/adresses.routes.js";
@@ -15,7 +15,7 @@ import { globalLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.js";
 
 import prisma from "./database/neon.js";
-import { FRONTEND_URL, JWT_SECRET, JWT_EXPIRY } from "./config/env.js";
+import { FRONTEND_URL } from "./config/env.js";
 
 const app = express();
 
@@ -64,27 +64,7 @@ app.get(
     failureRedirect: `${FRONTEND_URL}/account?error=google_failed`,
     session: false,
   }),
-  (req, res) => {
-    const user = req.user;
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRY || "7d" }
-    );
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    const destination = user.role === "ADMIN"
-      ? `${FRONTEND_URL}/account/dashboard/admin`
-      : `${FRONTEND_URL}/account/dashboard`;
-
-    res.redirect(destination);
-  }
+  googleCallback  // handled in auth.controller.js with proper token rotation
 );
 
 app.get("/", (req, res) => {
