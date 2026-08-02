@@ -1,11 +1,11 @@
 import prisma from "../database/neon.js";
 import mpesa from "../config/mpesa.js";
-import { sendMail } from "../config/nodemailer.js";
+import { sendMail } from "../config/resend.js";
 import { buildPaymentStatusEmail } from "../utils/emailTemplates.js";
 import { FRONTEND_URL } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
 
-// ─── POST /api/v1/payments/stkpush ────────────────────────────────────────────
+// POST /api/v1/payments/stkpush
 export async function initiateStkPush(req, res, next) {
     try {
         const { orderId, phone } = req.body;
@@ -37,7 +37,7 @@ export async function initiateStkPush(req, res, next) {
     }
 }
 
-// ─── GET /api/v1/payments/status/:checkoutRequestId ───────────────────────────
+// GET /api/v1/payments/status/:checkoutRequestId
 export async function getStkStatus(req, res, next) {
     try {
         const { checkoutRequestId } = req.params;
@@ -59,7 +59,7 @@ export async function getStkStatus(req, res, next) {
     }
 }
 
-// ─── PATCH /api/v1/payments/:id/status ───────────────────────────────────────
+// PATCH /api/v1/payments/:id/status
 export async function updatePaymentStatus(req, res, next) {
     try {
         const { id }                     = req.params;
@@ -108,7 +108,7 @@ export async function updatePaymentStatus(req, res, next) {
     }
 }
 
-// ─── POST /api/v1/payments/mpesa/callback ────────────────────────────────────
+// POST /api/v1/payments/mpesa/callback
 // Safaricom Daraja callback — must always return 200 so Daraja stops retrying.
 export async function mpesaCallback(req, res) {
     try {

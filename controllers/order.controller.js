@@ -1,6 +1,6 @@
 import prisma from "../database/neon.js";
 import { initiateSTKPush, normalisePhone } from "../config/mpesa.js";
-import { sendMail } from "../config/nodemailer.js";
+import { sendMail } from "../config/resend.js";
 import { buildUserOrderEmail, buildAdminOrderEmail, buildOrderStatusEmail } from "../utils/emailTemplates.js";
 import { FRONTEND_URL, ADMIN_EMAIL } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
