@@ -14,9 +14,13 @@ export function requireAuth(req, res, next) {
         req.headers?.authorization?.split(" ")[1];
 
     if (!token) {
+        // No token present — tell the client to attempt a refresh rather than
+        // immediately treating this as a hard sign-out. The client can use its
+        // refresh_token cookie to silently obtain a new access token.
         return res.status(401).json({
             success: false,
-            message: "Not authenticated. Please sign in.",
+            code:    "TOKEN_EXPIRED",
+            message: "Access token missing. Please refresh your session.",
         });
     }
 
@@ -25,12 +29,11 @@ export function requireAuth(req, res, next) {
         req.user = decoded; // { id, email, role }
         next();
     } catch (error) {
-        // Distinguish expired from invalid so the frontend can decide to refresh
         if (error.name === "TokenExpiredError") {
             return res.status(401).json({
-                success:  false,
-                code:     "TOKEN_EXPIRED",
-                message:  "Access token expired. Please refresh your session.",
+                success: false,
+                code:    "TOKEN_EXPIRED",
+                message: "Access token expired. Please refresh your session.",
             });
         }
         return res.status(401).json({
