@@ -19,9 +19,14 @@ import { FRONTEND_URL } from "./config/env.js";
 
 const app = express();
 
-// CORS — allow the Next.js frontend to send cookies cross-origin
+// CORS — allow the Next.js frontend and production domain to send cookies cross-origin
 app.use(cors({
-  origin: FRONTEND_URL || "http://localhost:3000",
+  origin: [
+    FRONTEND_URL || 
+    "https://castrahouseholds.co.ke",
+    "https://www.castrahouseholds.co.ke",
+    "http://localhost:3000",
+  ],
   credentials: true,
 }));
 
