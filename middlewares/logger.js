@@ -1,24 +1,19 @@
-/**
- * logger.js
- *
- * Sentry initialisation + thin logging helpers used across the API.
- *
- * IMPORTANT — this file must be imported FIRST in app.js, before any other
- * import, so Sentry can instrument all modules (Express, Prisma, http, etc.)
- * via its auto-instrumentation hooks.
- *
- * Usage in app.js:
- *   import "./middlewares/logger.js";          // side-effect: inits Sentry
- *   import { sentryRequestHandler,
- *            sentryErrorHandler,
- *            logger }   from "./middlewares/logger.js";
- *
- * Usage anywhere else:
- *   import { logger } from "../middlewares/logger.js";
- *   logger.info("Server started on port 5500");
- *   logger.error("Unexpected failure", err);
- *   logger.captureException(err, { extra: { orderId } });
- */
+// logger.js
+
+// Sentry initialisation + thin logging helpers used across the API.
+// IMPORTANT — this file must be imported FIRST in app.js, before any other
+// import, so Sentry can instrument all modules (Express, Prisma, http, etc.)
+// via its auto-instrumentation hooks.
+//  Usage in app.js:
+//import "./middlewares/logger.js";          // side-effect: inits Sentry
+// import { sentryRequestHandler,
+// sentryErrorHandler,
+// logger }   from "./middlewares/logger.js";
+// Usage anywhere else:
+// import { logger } from "../middlewares/logger.js";
+// logger.info("Server started on port 5500");
+// logger.error("Unexpected failure", err);
+// logger.captureException(err, { extra: { orderId } })
 
 import * as Sentry from "@sentry/node";
 import { NODE_ENV, SENTRY_DSN, SENTRY_ENVIRONMENT } from "../config/env.js";
