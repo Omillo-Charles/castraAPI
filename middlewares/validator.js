@@ -185,7 +185,7 @@ export const placeOrderSchema = z.object({
     contact: z.object({
         firstName: name,
         lastName:  name,
-        email:     email.optional(),
+        email,
         phone,
     }),
     delivery: z.object({

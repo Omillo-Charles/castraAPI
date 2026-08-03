@@ -178,10 +178,18 @@ export async function placeOrder(req, res, next) {
         }));
         const orderUrl = `${FRONTEND_URL}/track-order?q=${order.ref}`;
 
-        const recipientEmail = contact.email ?? (owner.type === "user" ? req.user?.email : null) ?? null;
+        // Use the email saved on the order record — it was captured at checkout
+        // and is the most reliable source. Falls back to the JWT user email for
+        // authenticated users who left the email field blank at checkout.
+        const recipientEmail = order.email
+            || (owner.type === "user" ? req.user?.email : null)
+            || null;
+
         if (recipientEmail) {
             sendMail({ to: recipientEmail, ...buildUserOrderEmail({ customerName: contact.firstName, orderId: order.ref, items: orderItems, total, orderUrl }) })
                 .catch((e) => console.error("[placeOrder] user email failed:", e.message));
+        } else {
+            console.warn(`[placeOrder] No recipient email for order ${order.ref} — user email skipped.`);
         }
 
         if (ADMIN_EMAIL) {
@@ -189,7 +197,7 @@ export async function placeOrder(req, res, next) {
                 to: ADMIN_EMAIL,
                 ...buildAdminOrderEmail({
                     customerName:    `${contact.firstName} ${contact.lastName}`,
-                    customerEmail:   contact.email ?? (owner.type === "user" ? req.user?.email : null) ?? "",
+                    customerEmail:   order.email ?? (owner.type === "user" ? req.user?.email : null) ?? "",
                     customerPhone:   contact.phone,
                     orderId:         order.ref,
                     items:           orderItems,
