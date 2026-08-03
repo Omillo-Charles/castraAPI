@@ -4,6 +4,7 @@ import { sendMail } from "../config/resend.js";
 import { buildUserOrderEmail, buildAdminOrderEmail, buildOrderStatusEmail } from "../utils/emailTemplates.js";
 import { FRONTEND_URL, ADMIN_EMAIL } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
+import { logger } from "../middlewares/logger.js";
 
 // Helpers 
 
@@ -160,7 +161,7 @@ export async function placeOrder(req, res, next) {
 
                 stkDetails = { checkoutRequestId: stkRes.CheckoutRequestID, customerMessage: stkRes.CustomerMessage };
             } catch (stkError) {
-                console.error("[placeOrder] STK push failed:", stkError.message);
+                logger.error("[placeOrder] STK push failed", stkError);
                 paymentRecord = await prisma.payment.update({
                     where: { id: paymentRecord.id },
                     data:  { status: "FAILED" },
@@ -188,9 +189,9 @@ export async function placeOrder(req, res, next) {
 
         if (recipientEmail) {
             sendMail({ to: recipientEmail, ...buildUserOrderEmail({ customerName: contact.firstName, orderId: order.ref, items: orderItems, total, orderUrl }) })
-                .catch((e) => console.error("[placeOrder] user email failed:", e.message));
+                .catch((e) => logger.error("[placeOrder] user email failed", e));
         } else {
-            console.warn(`[placeOrder] No recipient email for order ${order.ref} — user email skipped.`);
+            logger.warn(`[placeOrder] No recipient email for order ${order.ref} — user email skipped.`);
         }
 
         if (ADMIN_EMAIL) {
@@ -210,7 +211,7 @@ export async function placeOrder(req, res, next) {
                     stkPhone:        paymentData.stkPhone ?? "",
                     orderUrl:        adminUrl,
                 }),
-            }).catch((e) => console.error("[placeOrder] admin email failed:", e.message));
+            }).catch((e) => logger.error("[placeOrder] admin email failed", e));
         }
 
         return res.status(201).json({
@@ -392,7 +393,7 @@ export async function updateOrderStatus(req, res, next) {
                     total:    order.total,
                     orderUrl: `${FRONTEND_URL}/track-order?q=${order.ref}`,
                 }),
-            }).catch((e) => console.error("[updateOrderStatus] email failed:", e.message));
+            }).catch((e) => logger.error("[updateOrderStatus] email failed", e));
         }
 
         return res.status(200).json({ success: true, order });

@@ -4,6 +4,7 @@ import { sendMail } from "../config/resend.js";
 import { buildPaymentStatusEmail } from "../utils/emailTemplates.js";
 import { FRONTEND_URL } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
+import { logger } from "../middlewares/logger.js";
 
 // POST /api/v1/payments/stkpush
 export async function initiateStkPush(req, res, next) {
@@ -99,7 +100,7 @@ export async function updatePaymentStatus(req, res, next) {
                     total:    order.total,
                     orderUrl: `${FRONTEND_URL}/track-order?q=${order.ref}`,
                 }),
-            }).catch((e) => console.error("[updatePaymentStatus] email failed:", e.message));
+            }).catch((e) => logger.error("[updatePaymentStatus] email failed", e));
         }
 
         return res.status(200).json({ success: true, payment: updatedPayment });
@@ -122,21 +123,21 @@ export async function mpesaCallback(req, res) {
             typeof body.Body.stkCallback.CheckoutRequestID !== "string" ||
             typeof body.Body.stkCallback.ResultCode === "undefined"
         ) {
-            console.warn("[mpesaCallback] Rejected: invalid payload structure");
+            logger.warn("[mpesaCallback] Rejected: invalid payload structure");
             return res.status(200).send("Acknowledged");
         }
 
         const result = mpesa.parseSTKCallback(body);
 
         if (!result?.checkoutRequestId) {
-            console.error("[mpesaCallback] Invalid or missing CheckoutRequestID");
+            logger.error("[mpesaCallback] Invalid or missing CheckoutRequestID");
             return res.status(200).send("Acknowledged");
         }
 
         const payment = await prisma.payment.findFirst({ where: { checkoutRequestId: result.checkoutRequestId } });
 
         if (!payment) {
-            console.error(`[mpesaCallback] No payment for CheckoutRequestID: ${result.checkoutRequestId}`);
+            logger.error(`[mpesaCallback] No payment for CheckoutRequestID: ${result.checkoutRequestId}`);
             return res.status(200).send("Acknowledged");
         }
 
@@ -144,7 +145,7 @@ export async function mpesaCallback(req, res) {
         // Never overwrite a terminal state. If payment is already PAID or FAILED,
         // a replay cannot change it — even from Daraja itself.
         if (payment.status !== "PENDING") {
-            console.log(`[mpesaCallback] Payment ${payment.id} already ${payment.status} — skipping`);
+            logger.info(`[mpesaCallback] Payment ${payment.id} already ${payment.status} — skipping`);
             return res.status(200).send("Acknowledged");
         }
 
@@ -155,11 +156,11 @@ export async function mpesaCallback(req, res) {
             data:  { status: newStatus, mpesaReceiptNumber: result.mpesaReceiptNumber || null },
         });
 
-        console.log(`[mpesaCallback] Payment ${payment.id} → ${newStatus} (IP: ${req.ip})`);
+        logger.info(`[mpesaCallback] Payment ${payment.id} → ${newStatus} (IP: ${req.ip})`);
         return res.status(200).send("Acknowledged");
     } catch (error) {
         // Still return 200 — never let Daraja see a 5xx
-        console.error("[mpesaCallback]", error);
+        logger.error("[mpesaCallback] Unhandled error", error);
         return res.status(200).send("Acknowledged");
     }
 }

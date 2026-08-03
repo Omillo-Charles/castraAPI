@@ -1,4 +1,5 @@
 import { NODE_ENV } from "../config/env.js";
+import { logger } from "./logger.js";
 
 // Safaricom published IP ranges
 // Source: Safaricom Daraja developer portal (production + sandbox)
@@ -57,12 +58,12 @@ export function safaricomOnly(req, res, next) {
 
     if (NODE_ENV !== "production") {
         // In dev/sandbox: allow through but log so developers are aware
-        console.log(`[safaricomOnly] ${NODE_ENV} — allowing callback from ${ip}`);
+        logger.info(`[safaricomOnly] ${NODE_ENV} — allowing callback from ${ip}`);
         return next();
     }
 
     if (!isAllowedIp(ip)) {
-        console.warn(`[safaricomOnly] BLOCKED callback from unknown IP: ${ip}`);
+        logger.warn(`[safaricomOnly] BLOCKED callback from unknown IP: ${ip}`);
         // Return 200 — we don't want Daraja to think the endpoint is down
         return res.status(200).send("Acknowledged");
     }

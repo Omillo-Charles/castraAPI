@@ -8,6 +8,7 @@
     "dev": "nodemon app.js"
   },
   "dependencies": {
+    "@sentry/node": "^8.55.2",
     "@upstash/redis": "^1.34.9",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",

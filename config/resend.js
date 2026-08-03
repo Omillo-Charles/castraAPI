@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { RESEND_API_KEY, RESEND_FROM, NODE_ENV } from "./env.js";
+import { logger } from "../middlewares/logger.js";
 
 // Client
 // Lazily initialised so the server boots even when the key is missing in local
@@ -34,8 +35,7 @@ export async function sendMail({ to, subject, html, text, from } = {}) {
     if (!client) {
         // Resend not configured — log and skip gracefully in non-production
         if (NODE_ENV !== "production") {
-            console.warn("[resend] RESEND_API_KEY not set — email skipped.");
-            console.warn(`[resend] Would have sent: "${subject}" → ${to}`);
+            logger.warn(`[resend] RESEND_API_KEY not set — email skipped. Would have sent: "${subject}" → ${to}`);
         }
         return { id: null, skipped: true };
     }
@@ -53,7 +53,7 @@ export async function sendMail({ to, subject, html, text, from } = {}) {
     }
 
     if (NODE_ENV === "development") {
-        console.log(`[resend] Email sent: "${subject}" → ${to} (id: ${data?.id})`);
+        logger.info(`[resend] Email sent: "${subject}" → ${to} (id: ${data?.id})`);
     }
 
     return data;

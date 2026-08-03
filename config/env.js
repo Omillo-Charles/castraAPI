@@ -28,4 +28,6 @@ export const {
     ADMIN_EMAIL,
     UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN,
+    SENTRY_DSN,
+    SENTRY_ENVIRONMENT,
 } = process.env;

@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN } from "../config/env.js";
+import { logger } from "./logger.js";
 
 // Redis client
 // Lazily initialised so the server boots even if the env vars are missing in
@@ -61,7 +62,7 @@ export function cacheResponse(keyFn, ttl) {
                 return res.status(200).json(cached);
             }
         } catch (err) {
-            console.warn("[cacher] Redis GET failed, falling through:", err.message);
+            logger.warn("[cacher] Redis GET failed, falling through: " + err.message);
             return next();
         }
 
@@ -73,7 +74,7 @@ export function cacheResponse(keyFn, ttl) {
                 try {
                     await client.set(key, body, { ex: ttl });
                 } catch (err) {
-                    console.warn("[cacher] Redis SET failed:", err.message);
+                    logger.warn("[cacher] Redis SET failed: " + err.message);
                 }
             }
             return originalJson(body);
@@ -112,6 +113,6 @@ export async function invalidateProducts(id = null) {
             await client.del(productSingleKey(id));
         }
     } catch (err) {
-        console.warn("[cacher] Invalidation failed:", err.message);
+        logger.warn("[cacher] Invalidation failed: " + err.message);
     }
 }

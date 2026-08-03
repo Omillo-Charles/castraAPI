@@ -2,6 +2,9 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+// Sentry must be initialised before any other import so its auto-instrumentation
+// hooks wrap Express, http, and other modules from the very start.
+import { sentryRequestHandler, sentryErrorHandler, logger } from "./middlewares/logger.js";
 import passport from "./config/passport.js";
 import { googleCallback } from "./controllers/auth.controller.js";
 import authRouter from "./routes/auth.routes.js";
@@ -24,6 +27,10 @@ const app = express();
 // Required so req.ip resolves the real client IP, not the proxy's IP.
 // This is critical for IP allowlisting and rate limiting to work correctly.
 app.set("trust proxy", 1);
+
+// Sentry request handler — must be the very first middleware so every request
+// gets wrapped in a Sentry transaction for performance tracing.
+app.use(sentryRequestHandler());
 
 // CORS — allow the Next.js frontend and production domain to send cookies cross-origin
 app.use(cors({
@@ -91,15 +98,29 @@ app.get("/", (req, res) => {
 
 // 404 + global error handler — must be last
 app.use(notFoundHandler);
+// Sentry error handler — captures unhandled errors before our own handler runs.
+// Must sit between notFoundHandler and errorHandler.
+app.use(sentryErrorHandler());
 app.use(errorHandler);
 
 async function connectDB() {
-  try {
-    await prisma.$connect();
-    console.log("Database connected successfully");
-  } catch (error) {
-    console.error("Database connection failed:", error.message);
-    process.exit(1);
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 5000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await prisma.$connect();
+      logger.info("Database connected successfully");
+      return;
+    } catch (error) {
+      const isLastAttempt = attempt === MAX_RETRIES;
+      if (isLastAttempt) {
+        logger.error(`Database connection failed after ${MAX_RETRIES} attempts`, error);
+        process.exit(1);
+      }
+      logger.warn(`Database connection attempt ${attempt} failed — retrying in ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
   }
 }
 
@@ -107,7 +128,7 @@ async function startServer() {
   await connectDB();
 
   app.listen(5500, () => {
-    console.log("The Castra Collection ExpressJS Backend API is running on http://localhost:5500");
+    logger.info("The Castra Collection ExpressJS Backend API is running on http://localhost:5500");
   });
 }
 

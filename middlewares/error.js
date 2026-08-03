@@ -1,4 +1,5 @@
 import { NODE_ENV } from "../config/env.js";
+import { logger } from "./logger.js";
 
 // AppError
 // Throw this anywhere in a controller to send a predictable HTTP error response.
@@ -52,7 +53,7 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
     if (err.constructor?.name === "PrismaClientKnownRequestError" || err.code?.startsWith?.("P2")) {
         const normalised = normalisePrismaError(err);
         if (normalised) {
-            console.error(`[${req.method} ${req.path}] Prisma ${err.code}:`, err.message);
+            logger.warn(`[${req.method} ${req.path}] Prisma ${err.code}: ${err.message}`);
             return res.status(normalised.statusCode).json({
                 success: false,
                 message: normalised.message,
@@ -88,8 +89,8 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
     }
 
     // Unknown / unexpected error
-    // Log the full error internally; never expose stack traces in production.
-    console.error(`[${req.method} ${req.path}]`, err);
+    // Log + capture to Sentry; never expose stack traces in production.
+    logger.error(`[${req.method} ${req.path}] Unhandled error`, err);
 
     return res.status(500).json({
         success: false,

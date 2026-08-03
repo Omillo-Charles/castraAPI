@@ -123,7 +123,7 @@ export async function register(req, res, next) {
         sendMail({
             to:      email,
             ...verifyEmailTemplate({ firstName, verifyUrl }),
-        }).catch((err) => console.error("[register] verify email send failed:", err.message));
+        }).catch((err) => logger.error("[register] verify email send failed", err));
 
         return sendTokenResponse(res, user, 201);
     } catch (error) {
