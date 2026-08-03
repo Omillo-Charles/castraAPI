@@ -313,7 +313,9 @@ export function buildAdminOrderEmail({
 } = {}) {
     const collection  = categoryText(items);
     const subject     = `[New Order] #${orderId} – ${customerName} – Payment: ${paymentStatus}`;
-    const methodLabel = paymentMethod === "MPESA_STK" ? "M-Pesa STK Push" : paymentMethod;
+    const methodLabel = paymentMethod === "MPESA_STK"    ? "M-Pesa STK Push"
+                      : paymentMethod === "MPESA_MANUAL" ? "M-Pesa Manual (Paybill/Send Money)"
+                      : paymentMethod;
     const statusStyle = paymentStatusStyle(paymentStatus);
 
     const infoRows = [

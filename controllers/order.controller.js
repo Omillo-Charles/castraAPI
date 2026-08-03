@@ -130,42 +130,50 @@ export async function placeOrder(req, res, next) {
         }, { timeout: 15000, maxWait: 5000, isolationLevel: "ReadCommitted" });
 
         // ── Payment ──
+        const isManual   = paymentData.method === "manual";
+        const dbMethod   = isManual ? "MPESA_MANUAL" : "MPESA_STK";
+
         let paymentRecord = await prisma.payment.create({
             data: {
                 orderId:  order.id,
-                method:   "MPESA_STK",
+                method:   dbMethod,
                 amount:   total,
-                stkPhone: paymentData.stkPhone ?? null,
+                stkPhone: isManual ? null : (paymentData.stkPhone ?? null),
                 status:   "PENDING",
             },
         });
 
         let stkDetails = null;
 
-        let normalisedPhone = null;
-        try { normalisedPhone = normalisePhone(paymentData.stkPhone); } catch { /* invalid format */ }
+        // Only attempt STK push when the customer chose that method AND
+        // provided a valid phone number. Manual payments stay PENDING until
+        // the admin confirms via the dashboard once they see the M-Pesa notification.
+        if (!isManual) {
+            let normalisedPhone = null;
+            try { normalisedPhone = normalisePhone(paymentData.stkPhone); } catch { /* invalid format */ }
 
-        if (normalisedPhone) {
-            try {
-                const stkRes = await initiateSTKPush({
-                    amount:      total,
-                    phone:       normalisedPhone,
-                    orderId:     order.id,
-                    description: "CastraOrder",
-                });
+            if (normalisedPhone) {
+                try {
+                    const stkRes = await initiateSTKPush({
+                        amount:      total,
+                        phone:       normalisedPhone,
+                        orderId:     order.id,
+                        description: "CastraOrder",
+                    });
 
-                paymentRecord = await prisma.payment.update({
-                    where: { id: paymentRecord.id },
-                    data:  { stkPhone: normalisedPhone, checkoutRequestId: stkRes.CheckoutRequestID ?? null },
-                });
+                    paymentRecord = await prisma.payment.update({
+                        where: { id: paymentRecord.id },
+                        data:  { stkPhone: normalisedPhone, checkoutRequestId: stkRes.CheckoutRequestID ?? null },
+                    });
 
-                stkDetails = { checkoutRequestId: stkRes.CheckoutRequestID, customerMessage: stkRes.CustomerMessage };
-            } catch (stkError) {
-                logger.error("[placeOrder] STK push failed", stkError);
-                paymentRecord = await prisma.payment.update({
-                    where: { id: paymentRecord.id },
-                    data:  { status: "FAILED" },
-                });
+                    stkDetails = { checkoutRequestId: stkRes.CheckoutRequestID, customerMessage: stkRes.CustomerMessage };
+                } catch (stkError) {
+                    logger.error("[placeOrder] STK push failed", stkError);
+                    paymentRecord = await prisma.payment.update({
+                        where: { id: paymentRecord.id },
+                        data:  { status: "FAILED" },
+                    });
+                }
             }
         }
 
@@ -206,9 +214,9 @@ export async function placeOrder(req, res, next) {
                     subtotal,
                     total,
                     shippingAddress: `${delivery.street}, ${delivery.city}, ${delivery.county}`,
-                    paymentMethod:   "MPESA_STK",
+                    paymentMethod:   dbMethod,
                     paymentStatus:   paymentRecord?.status ?? "PENDING",
-                    stkPhone:        paymentData.stkPhone ?? "",
+                    stkPhone:        isManual ? "" : (paymentData.stkPhone ?? ""),
                     orderUrl:        adminUrl,
                 }),
             }).catch((e) => logger.error("[placeOrder] admin email failed", e));

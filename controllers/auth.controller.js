@@ -119,9 +119,9 @@ export async function register(req, res, next) {
         });
 
         // Send verification email — non-blocking, never fails the registration
-        const verifyUrl = `${FRONTEND_URL}/api/auth/verify-email?token=${rawVerifyToken}`;
+        const verifyUrl = `${FRONTEND_URL}/api/v1/auth/verify-email?token=${rawVerifyToken}`;
         sendMail({
-            to:      email,
+            to: email,
             ...verifyEmailTemplate({ firstName, verifyUrl }),
         }).catch((err) => logger.error("[register] verify email send failed", err));
 
@@ -307,7 +307,7 @@ export async function forgotPassword(req, res, next) {
         const resetUrl = `${FRONTEND_URL}/account/reset-password?token=${rawToken}`;
 
         await sendMail({
-            to:      email,
+            to: email,
             ...resetPasswordEmail({ firstName: user.firstName, resetUrl }),
         });
 
@@ -433,7 +433,7 @@ export async function resendVerification(req, res, next) {
         const verifyUrl = `${FRONTEND_URL}/api/v1/auth/verify-email?token=${rawToken}`;
 
         await sendMail({
-            to:      email,
+            to: email,
             ...verifyEmailTemplate({ firstName: user.firstName, verifyUrl }),
         });
 

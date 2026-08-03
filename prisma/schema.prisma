@@ -25,6 +25,7 @@ enum OrderStatus {
 
 enum PaymentMethod {
   MPESA_STK
+  MPESA_MANUAL
 }
 
 enum PaymentStatus {

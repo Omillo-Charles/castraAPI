@@ -195,9 +195,14 @@ export const placeOrderSchema = z.object({
         notes:  z.string().max(256).trim().optional(),
     }),
     payment: z.object({
-        method:   z.literal("mpesa-stk", { errorMap: () => ({ message: "payment.method must be 'mpesa-stk'." }) }),
-        stkPhone: phone,
-    }),
+        method:   z.enum(["mpesa-stk", "manual"], {
+            errorMap: () => ({ message: "payment.method must be 'mpesa-stk' or 'manual'." }),
+        }),
+        stkPhone: phone.optional(),
+    }).refine(
+        (data) => data.method !== "mpesa-stk" || !!data.stkPhone,
+        { path: ["stkPhone"], message: "M-Pesa phone number is required for STK Push." }
+    ),
 });
 
 export const updateOrderStatusSchema = z.object({
