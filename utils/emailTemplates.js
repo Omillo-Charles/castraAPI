@@ -435,7 +435,7 @@ export function buildAdminOrderEmail({
   <div class="message">
     <p class="message-text">
       Head over to the dashboard to process this order, confirm delivery charges, and coordinate with the customer via WhatsApp.
-      <a href="${orderUrl}" class="track-link">View order in dashboard →</a>
+      <a href="${orderUrl}" class="track-link">Open Admin Dashboard →</a>
     </p>
   </div>
 

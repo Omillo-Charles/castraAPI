@@ -176,7 +176,8 @@ export async function placeOrder(req, res, next) {
             image:    i.product.images?.[0] ?? null,
             category: i.product.category ?? null,
         }));
-        const orderUrl = `${FRONTEND_URL}/track-order?q=${order.ref}`;
+        const orderUrl  = `${FRONTEND_URL}/track-order?q=${order.ref}`;
+        const adminUrl  = `${FRONTEND_URL}/account/dashboard/admin`;
 
         // Use the email saved on the order record — it was captured at checkout
         // and is the most reliable source. Falls back to the JWT user email for
@@ -207,7 +208,7 @@ export async function placeOrder(req, res, next) {
                     paymentMethod:   "MPESA_STK",
                     paymentStatus:   paymentRecord?.status ?? "PENDING",
                     stkPhone:        paymentData.stkPhone ?? "",
-                    orderUrl,
+                    orderUrl:        adminUrl,
                 }),
             }).catch((e) => console.error("[placeOrder] admin email failed:", e.message));
         }
