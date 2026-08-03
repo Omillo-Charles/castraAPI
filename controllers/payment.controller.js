@@ -112,7 +112,21 @@ export async function updatePaymentStatus(req, res, next) {
 // Safaricom Daraja callback — must always return 200 so Daraja stops retrying.
 export async function mpesaCallback(req, res) {
     try {
-        const result = mpesa.parseSTKCallback(req.body);
+        // Structural validation
+        // Reject payloads that don't match the Daraja STK callback shape.
+        // This stops forged requests that happen to have a valid checkoutRequestId
+        // from doing anything — they won't even reach the DB.
+        const body = req.body;
+        if (
+            !body?.Body?.stkCallback ||
+            typeof body.Body.stkCallback.CheckoutRequestID !== "string" ||
+            typeof body.Body.stkCallback.ResultCode === "undefined"
+        ) {
+            console.warn("[mpesaCallback] Rejected: invalid payload structure");
+            return res.status(200).send("Acknowledged");
+        }
+
+        const result = mpesa.parseSTKCallback(body);
 
         if (!result?.checkoutRequestId) {
             console.error("[mpesaCallback] Invalid or missing CheckoutRequestID");
@@ -126,6 +140,14 @@ export async function mpesaCallback(req, res) {
             return res.status(200).send("Acknowledged");
         }
 
+        // Idempotency guard
+        // Never overwrite a terminal state. If payment is already PAID or FAILED,
+        // a replay cannot change it — even from Daraja itself.
+        if (payment.status !== "PENDING") {
+            console.log(`[mpesaCallback] Payment ${payment.id} already ${payment.status} — skipping`);
+            return res.status(200).send("Acknowledged");
+        }
+
         const newStatus = result.success ? "PAID" : "FAILED";
 
         await prisma.payment.update({
@@ -133,7 +155,7 @@ export async function mpesaCallback(req, res) {
             data:  { status: newStatus, mpesaReceiptNumber: result.mpesaReceiptNumber || null },
         });
 
-        console.log(`[mpesaCallback] Payment ${payment.id} → ${newStatus}`);
+        console.log(`[mpesaCallback] Payment ${payment.id} → ${newStatus} (IP: ${req.ip})`);
         return res.status(200).send("Acknowledged");
     } catch (error) {
         // Still return 200 — never let Daraja see a 5xx

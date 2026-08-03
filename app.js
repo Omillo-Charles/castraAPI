@@ -20,6 +20,11 @@ import { FRONTEND_URL } from "./config/env.js";
 
 const app = express();
 
+// Trust the first hop from the reverse proxy (Render, Railway, Vercel, etc.)
+// Required so req.ip resolves the real client IP, not the proxy's IP.
+// This is critical for IP allowlisting and rate limiting to work correctly.
+app.set("trust proxy", 1);
+
 // CORS — allow the Next.js frontend and production domain to send cookies cross-origin
 app.use(cors({
   origin: [
