@@ -220,3 +220,20 @@ export const updatePaymentStatusSchema = z.object({
     }),
     mpesaReceiptNumber: z.string().trim().optional(),
 });
+
+// Auth — forgot / reset password / resend verification
+
+export const forgotPasswordSchema = z.object({
+    email,
+});
+
+export const resetPasswordSchema = z.object({
+    token: z
+        .string({ required_error: "Reset token is required." })
+        .min(1, "Reset token cannot be empty."),
+    password,
+});
+
+export const resendVerificationSchema = z.object({
+    email,
+});

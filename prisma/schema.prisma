@@ -45,8 +45,17 @@ model User {
   googleId      String?  @unique
   role          Role     @default(USER)
   emailVerified Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+
+  // Password reset
+  resetPasswordToken  String?   @unique
+  resetPasswordExpiry DateTime?
+
+  // Email verification
+  verifyEmailToken  String?   @unique
+  verifyEmailExpiry DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   addresses Address[]
   cart      Cart?
