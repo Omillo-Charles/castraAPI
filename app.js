@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import passport from "./config/passport.js";
 import { googleCallback } from "./controllers/auth.controller.js";
 import authRouter from "./routes/auth.routes.js";
@@ -22,17 +23,24 @@ const app = express();
 // CORS — allow the Next.js frontend and production domain to send cookies cross-origin
 app.use(cors({
   origin: [
-    FRONTEND_URL || 
+    FRONTEND_URL,
     "https://castrahouseholds.co.ke",
     "https://www.castrahouseholds.co.ke",
     "http://localhost:3000",
-  ],
+  ].filter(Boolean),
   credentials: true,
 }));
 
-app.use(express.json());
+// Security headers — sets X-Frame-Options, X-Content-Type-Options, HSTS,
+// Referrer-Policy, and more. Must be before routes.
+app.use(helmet({
+  contentSecurityPolicy: false, // disabled — CSP for an API with cookie auth
+                                 // is handled at the frontend (Next.js) level
+}));
+
+app.use(express.json({ limit: "50kb" }));
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
 // Global rate limit — applies to every route
 app.use(globalLimiter);
@@ -73,10 +81,7 @@ app.get(
 );
 
 app.get("/", (req, res) => {
-  res.send({
-    "title": "The Castra Collection ExpressJS Backend API",
-    "body": "Welcome to the Castra Collection ExpressJS Backend API"
-  })
+  res.status(200).json({ ok: true });
 })
 
 // 404 + global error handler — must be last

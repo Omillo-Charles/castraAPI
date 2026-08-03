@@ -10,12 +10,12 @@ import {
 } from "../config/env.js";
 import { AppError } from "../middlewares/error.js";
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// Constants 
 
 const ACCESS_EXPIRY_MS  = 15 * 60 * 1000;           // 15 minutes
 const REFRESH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
 
-// ─── Token helpers ─────────────────────────────────────────────────────────────
+// Token helpers
 
 function generateAccessToken(user) {
     return jwt.sign(
@@ -85,7 +85,7 @@ async function sendTokenResponse(res, user, statusCode = 200) {
         .json({ success: true, token: accessToken, user: safeUser });
 }
 
-// ─── Controllers ───────────────────────────────────────────────────────────────
+// Controllers 
 
 // POST /api/v1/auth/register
 export async function register(req, res, next) {
@@ -120,6 +120,11 @@ export async function login(req, res, next) {
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) throw new AppError("Invalid email or password.", 401);
+
+        // Clean up any expired refresh tokens for this user (lazy GC)
+        await prisma.refreshToken.deleteMany({
+            where: { userId: user.id, expiresAt: { lt: new Date() } },
+        });
 
         return sendTokenResponse(res, user);
     } catch (error) {
