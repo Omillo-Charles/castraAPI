@@ -1,5 +1,5 @@
 /**
- * Email template — Email Verification
+ * Email template - Email Verification
  *
  * Returns { subject, html, text } for the post-registration verification flow.
  *
@@ -105,7 +105,7 @@ ${verifyUrl}
 
 This link expires in 24 hours. If you didn't sign up, just ignore this email.
 
-— Castra Households
+- Castra Households
 https://castrahouseholds.co.ke`;
 
     return { subject, html, text };

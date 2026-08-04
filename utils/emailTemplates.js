@@ -160,7 +160,7 @@ export function buildUserOrderEmail({ customerName = "there", orderId = "", item
       <tr>
         <td style="padding:20px 32px 8px;">
           <p style="margin:0 0 10px;font-size:13px;color:#a1a1aa;line-height:1.7;">
-            Your order is confirmed. Delivery charges aren't included yet — we'll confirm them and
+            Your order is confirmed. Delivery charges aren't included yet - we'll confirm them and
             coordinate the drop-off with you directly via WhatsApp shortly.
           </p>
           <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.7;">
@@ -209,7 +209,7 @@ const STATUS_COPY = {
         emoji:   "🚚",
     },
     OUT_FOR_DELIVERY: {
-        heading: "Out for delivery — almost there!",
+        heading: "Out for delivery - almost there!",
         body:    "Your order is out for delivery right now. Expect it at your door very shortly.",
         emoji:   "📍",
     },
@@ -255,7 +255,7 @@ export function buildOrderStatusEmail({ customerName = "there", orderId = "", or
       <tr>
         <td style="padding:20px 32px 8px;">
           <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.7;">
-            You can follow your order's journey anytime —
+            You can follow your order's journey anytime -
             <a href="${orderUrl}" style="color:#C6A16A;text-decoration:none;font-weight:600;">track it here →</a>
           </p>
         </td>
@@ -346,7 +346,7 @@ export function buildAdminOrderEmail({
           <p style="margin:0;font-size:14px;color:#a1a1aa;line-height:1.65;">
             <strong style="color:#ffffff;">${customerName}</strong> placed an order from the
             <strong style="color:#ffffff;">${collection}</strong>.
-            Payment is currently <span style="${statusStyle}font-weight:600;">${paymentStatus}</span> — review and action below.
+            Payment is currently <span style="${statusStyle}font-weight:600;">${paymentStatus}</span> - review and action below.
           </p>
         </td>
       </tr>
@@ -374,7 +374,7 @@ export function buildAdminOrderEmail({
         </td>
       </tr>
 
-      ${FOOTER(`© ${new Date().getFullYear()} Castra Households · Internal notification — do not forward.`)}
+      ${FOOTER(`© ${new Date().getFullYear()} Castra Households · Internal notification - do not forward.`)}
     `);
 
     const text = `[New Order] #${orderId} – Payment: ${paymentStatus}
@@ -408,12 +408,12 @@ const PAYMENT_COPY = {
     },
     PENDING: {
         heading: "Payment is pending.",
-        body:    "Your payment is still being processed. If you haven't completed the M-Pesa prompt, please do so — or reach out to us on WhatsApp and we'll sort it out.",
+        body:    "Your payment is still being processed. If you haven't completed the M-Pesa prompt, please do so - or reach out to us on WhatsApp and we'll sort it out.",
         emoji:   "⏳",
     },
     FAILED: {
         heading: "Payment was not completed.",
-        body:    "We weren't able to confirm your payment. Don't worry — your order is still held. Please reach out to us on WhatsApp and we'll help you complete the payment.",
+        body:    "We weren't able to confirm your payment. Don't worry - your order is still held. Please reach out to us on WhatsApp and we'll help you complete the payment.",
         emoji:   "⚠️",
     },
 };
@@ -466,7 +466,7 @@ export function buildPaymentStatusEmail({ customerName = "there", orderId = "", 
       <tr>
         <td style="padding:20px 32px 8px;">
           <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.7;">
-            Track your order anytime —
+            Track your order anytime -
             <a href="${orderUrl}" style="color:#C6A16A;text-decoration:none;font-weight:600;">visit here →</a>
           </p>
         </td>

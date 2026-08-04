@@ -1,5 +1,5 @@
 /**
- * Email template — Password Reset
+ * Email template - Password Reset
  *
  * Returns { subject, html, text } for the forgot-password flow.
  *
@@ -68,7 +68,7 @@ export function resetPasswordEmail({ firstName, resetUrl }) {
               <!-- Expiry notice -->
               <p style="margin:0 0 20px;font-size:12px;color:#71717a;text-align:center;line-height:1.6;">
                 This link expires in <strong style="color:#a1a1aa;">1 hour</strong>.
-                If you didn't request a password reset, you can safely ignore this email — your password won't change.
+                If you didn't request a password reset, you can safely ignore this email - your password won't change.
               </p>
 
               <!-- Fallback URL -->
@@ -105,9 +105,9 @@ We received a request to reset the password on your Castra account.
 Reset your password here:
 ${resetUrl}
 
-This link expires in 1 hour. If you didn't request a reset, just ignore this email — your password won't change.
+This link expires in 1 hour. If you didn't request a reset, just ignore this email - your password won't change.
 
-— Castra Households
+- Castra Households
 https://castrahouseholds.co.ke`;
 
     return { subject, html, text };
