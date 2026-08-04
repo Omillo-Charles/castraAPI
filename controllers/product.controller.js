@@ -31,6 +31,11 @@ export async function getProducts(req, res, next) {
                 { slug:     { equals: category, mode: "insensitive" } },
                 { slug:     { equals: slugified, mode: "insensitive" } },
             ];
+        } else {
+            // When no category filter is applied (the "All" view on the main grid),
+            // exclude Kicks — they have their own dedicated /kicks page and should
+            // not appear in the general product grid.
+            where.NOT = { category: { equals: "kicks", mode: "insensitive" } };
         }
         if (search) where.name = { contains: search, mode: "insensitive" };
 
