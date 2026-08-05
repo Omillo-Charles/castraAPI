@@ -19,7 +19,7 @@ import { globalLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.js";
 
 import prisma from "./database/neon.js";
-import { FRONTEND_URL } from "./config/env.js";
+import { FRONTEND_URL, PORT } from "./config/env.js";
 
 const app = express();
 
@@ -47,7 +47,7 @@ app.use(cors({
 // Referrer-Policy, and more. Must be before routes.
 app.use(helmet({
   contentSecurityPolicy: false, // disabled — CSP for an API with cookie auth
-                                 // is handled at the frontend (Next.js) level
+  // is handled at the frontend (Next.js) level
 }));
 
 app.use(express.json({ limit: "50kb" }));
@@ -128,7 +128,7 @@ async function startServer() {
   await connectDB();
 
   app.listen(5500, () => {
-    logger.info("The Castra Collection ExpressJS Backend API is running on http://localhost:5500");
+    logger.info(`The Castra Collection ExpressJS Backend API is running on http://localhost:${PORT}`);
   });
 }
 

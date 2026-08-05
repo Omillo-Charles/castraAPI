@@ -5,7 +5,6 @@ import { JWT_SECRET } from "../config/env.js";
 // Token accepted from:
 //   1. httpOnly cookie named "token" (set on login/refresh)
 //   2. Authorization: Bearer <token> header (for API clients)
-//
 // On expiry the client should call POST /api/v1/auth/refresh with its
 // refresh_token cookie to obtain a new access token.
 export function requireAuth(req, res, next) {
@@ -19,7 +18,7 @@ export function requireAuth(req, res, next) {
         // refresh_token cookie to silently obtain a new access token.
         return res.status(401).json({
             success: false,
-            code:    "TOKEN_EXPIRED",
+            code: "TOKEN_EXPIRED",
             message: "Access token missing. Please refresh your session.",
         });
     }
@@ -32,7 +31,7 @@ export function requireAuth(req, res, next) {
         if (error.name === "TokenExpiredError") {
             return res.status(401).json({
                 success: false,
-                code:    "TOKEN_EXPIRED",
+                code: "TOKEN_EXPIRED",
                 message: "Access token expired. Please refresh your session.",
             });
         }
