@@ -21,6 +21,7 @@ enum OrderStatus {
   DISPATCHED
   OUT_FOR_DELIVERY
   DELIVERED
+  CANCELLED
 }
 
 enum PaymentMethod {

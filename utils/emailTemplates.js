@@ -218,6 +218,11 @@ const STATUS_COPY = {
         body:    "Your order has been delivered. We hope everything arrived in perfect condition. Thank you for shopping with Castra!",
         emoji:   "🎉",
     },
+    CANCELLED: {
+        heading: "Your order has been cancelled.",
+        body:    "Your order has been cancelled. If you believe this is a mistake or need assistance, please reach out to us on WhatsApp and we'll be happy to help.",
+        emoji:   "❌",
+    },
 };
 
 /**

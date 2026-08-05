@@ -207,8 +207,8 @@ export const placeOrderSchema = z.object({
 
 export const updateOrderStatusSchema = z.object({
     status: z.enum(
-        ["CONFIRMED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"],
-        { errorMap: () => ({ message: "status must be one of: CONFIRMED, PROCESSING, DISPATCHED, OUT_FOR_DELIVERY, DELIVERED." }) }
+        ["CONFIRMED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
+        { errorMap: () => ({ message: "status must be one of: CONFIRMED, PROCESSING, DISPATCHED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED." }) }
     ),
 });
 
