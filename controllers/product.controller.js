@@ -72,7 +72,7 @@ export async function getProductById(req, res, next) {
 // POST /api/v1/products
 export async function createProduct(req, res, next) {
     try {
-        const { name, category, slug, price, originalPrice, stock, active, deliveryFee } = req.body;
+        const { name, description, category, slug, price, originalPrice, stock, active, deliveryFee } = req.body;
 
         const imageUrls = [];
         if (req.files?.length > 0) {
@@ -85,6 +85,7 @@ export async function createProduct(req, res, next) {
         const product = await prisma.product.create({
             data: {
                 name,
+                description:   description || null,
                 category,
                 slug,
                 price:         Number(price),
@@ -108,13 +109,14 @@ export async function createProduct(req, res, next) {
 export async function updateProduct(req, res, next) {
     try {
         const { id } = req.params;
-        const { name, category, slug, price, originalPrice, stock, active, replaceImages, deliveryFee } = req.body;
+        const { name, description, category, slug, price, originalPrice, stock, active, replaceImages, deliveryFee } = req.body;
 
         const existing = await prisma.product.findUnique({ where: { id } });
         if (!existing) throw new AppError("Product not found.", 404);
 
         const data = {};
         if (name          !== undefined) data.name          = name;
+        if (description   !== undefined) data.description   = description || null;
         if (category      !== undefined) data.category      = category;
         if (slug          !== undefined) data.slug          = slug;
         if (price         !== undefined) data.price         = Number(price);

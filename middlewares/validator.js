@@ -153,6 +153,7 @@ export const addWishlistSchema = z.object({
 
 export const createProductSchema = z.object({
     name:          z.string().min(1, "Product name is required.").max(128).trim(),
+    description:   z.string().max(2000, "Description is too long.").trim().optional().nullable(),
     category:      z.string().min(1, "Category is required.").max(64).trim(),
     slug:          z.string().min(1, "Slug is required.").max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").trim(),
     price:         positiveInt("Price"),
@@ -165,6 +166,7 @@ export const createProductSchema = z.object({
 export const updateProductSchema = z
     .object({
         name:          z.string().min(1).max(128).trim().optional(),
+        description:   z.string().max(2000, "Description is too long.").trim().optional().nullable(),
         category:      z.string().min(1).max(64).trim().optional(),
         slug:          z.string().min(1).max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").optional(),
         price:         z.coerce.number().int().positive().optional(),
