@@ -77,20 +77,27 @@ app.use("/payment", paymentRouter);
 // registered in Google Cloud Console.
 
 // Step 1 — redirect user to Google
-app.get(
-  "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"], session: false })
-);
+app.get("/auth/google", (req, res, next) => {
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })(req, res, (err) => {
+    if (err) {
+      logger.error("[Google OAuth Start Error]", err);
+      return res.redirect(`${FRONTEND_URL}/account?error=google_failed`);
+    }
+    next();
+  });
+});
 
 // Step 2 — Google redirects back here
-app.get(
-  "/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: `${FRONTEND_URL}/account?error=google_failed`,
-    session: false,
-  }),
-  googleCallback  // handled in auth.controller.js with proper token rotation
-);
+app.get("/auth/google/callback", (req, res, next) => {
+  passport.authenticate("google", { session: false }, (err, user, info) => {
+    if (err || !user) {
+      logger.error("[Google OAuth Callback Error]", err || info);
+      return res.redirect(`${FRONTEND_URL}/account?error=google_failed`);
+    }
+    req.user = user;
+    return googleCallback(req, res, next);
+  })(req, res, next);
+});
 
 app.get("/", (req, res) => {
   res.status(200).json({ ok: true });

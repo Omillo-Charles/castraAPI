@@ -256,7 +256,8 @@ export async function getMe(req, res, next) {
 export async function googleCallback(req, res, next) {
     try {
         const user = req.user;
-        if (!user) return res.redirect(`${process.env.FRONTEND_URL}/account?error=google_failed`);
+        const targetFrontend = FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+        if (!user) return res.redirect(`${targetFrontend}/account?error=google_failed`);
 
         const accessToken  = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
@@ -267,9 +268,11 @@ export async function googleCallback(req, res, next) {
         res
             .cookie("token",         accessToken,  accessCookieOptions())
             .cookie("refresh_token", refreshToken, refreshCookieOptions())
-            .redirect(`${process.env.FRONTEND_URL}${dashboard}`);
+            .redirect(`${targetFrontend}${dashboard}`);
     } catch (error) {
-        next(error);
+        console.error("[Google Callback Error]", error);
+        const targetFrontend = FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+        return res.redirect(`${targetFrontend}/account?error=google_failed`);
     }
 }
 
