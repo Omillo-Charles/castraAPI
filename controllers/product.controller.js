@@ -74,12 +74,14 @@ export async function createProduct(req, res, next) {
     try {
         const { name, description, category, slug, price, originalPrice, stock, active, deliveryFee } = req.body;
 
+        if (!req.files || req.files.length === 0) {
+            throw new AppError("At least one product image is required.", 400);
+        }
+
         const imageUrls = [];
-        if (req.files?.length > 0) {
-            for (const file of req.files) {
-                const result = await uploadToCloudinary(file.buffer, "castra/products");
-                imageUrls.push(result.secure_url);
-            }
+        for (const file of req.files) {
+            const result = await uploadToCloudinary(file.buffer, "castra/products");
+            imageUrls.push(result.secure_url);
         }
 
         const product = await prisma.product.create({
@@ -140,6 +142,10 @@ export async function updateProduct(req, res, next) {
             } else {
                 data.images = [...existing.images, ...newUrls];
             }
+        } else if (replaceImages === "true") {
+            throw new AppError("Replacing images requires uploading at least one new product image.", 400);
+        } else if (!existing.images || existing.images.length === 0) {
+            throw new AppError("At least one product image is required.", 400);
         }
 
         const product = await prisma.product.update({ where: { id }, data });
