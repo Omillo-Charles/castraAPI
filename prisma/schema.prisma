@@ -94,6 +94,7 @@ model Product {
   name          String
   description   String?
   category      String
+  subcategory   String?
   slug          String
   price         Int // stored in KES (smallest unit — whole shillings)
   deliveryFee   Int      @default(0) // delivery fee charged per product in KES

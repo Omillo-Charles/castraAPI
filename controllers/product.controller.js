@@ -17,7 +17,7 @@ function publicIdFromUrl(url) {
 // GET /api/v1/products
 export async function getProducts(req, res, next) {
     try {
-        const { category, page = "1", limit = "8", sort, search } = req.query;
+        const { category, subcategory, page = "1", limit = "8", sort, search } = req.query;
 
         const pageNum  = Math.max(1, parseInt(page));
         const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
@@ -37,6 +37,18 @@ export async function getProducts(req, res, next) {
             // not appear in the general product grid.
             where.NOT = { category: { equals: "kicks", mode: "insensitive" } };
         }
+
+        if (subcategory) {
+            const subSlugified = subcategory.toLowerCase().replace(/\s+/g, "-");
+            where.AND = where.AND || [];
+            where.AND.push({
+                OR: [
+                    { subcategory: { equals: subcategory, mode: "insensitive" } },
+                    { subcategory: { equals: subSlugified, mode: "insensitive" } },
+                ],
+            });
+        }
+
         if (search) where.name = { contains: search, mode: "insensitive" };
 
         const orderBy = sort === "price-asc"  ? { price: "asc" }
@@ -72,7 +84,7 @@ export async function getProductById(req, res, next) {
 // POST /api/v1/products
 export async function createProduct(req, res, next) {
     try {
-        const { name, description, category, slug, price, originalPrice, stock, active, deliveryFee } = req.body;
+        const { name, description, category, subcategory, slug, price, originalPrice, stock, active, deliveryFee } = req.body;
 
         if (!req.files || req.files.length === 0) {
             throw new AppError("At least one product image is required.", 400);
@@ -89,6 +101,7 @@ export async function createProduct(req, res, next) {
                 name,
                 description:   description || null,
                 category,
+                subcategory:   subcategory || null,
                 slug,
                 price:         Number(price),
                 deliveryFee:   Number(deliveryFee ?? 0),
@@ -111,7 +124,7 @@ export async function createProduct(req, res, next) {
 export async function updateProduct(req, res, next) {
     try {
         const { id } = req.params;
-        const { name, description, category, slug, price, originalPrice, stock, active, replaceImages, deliveryFee } = req.body;
+        const { name, description, category, subcategory, slug, price, originalPrice, stock, active, replaceImages, deliveryFee } = req.body;
 
         const existing = await prisma.product.findUnique({ where: { id } });
         if (!existing) throw new AppError("Product not found.", 404);
@@ -120,6 +133,7 @@ export async function updateProduct(req, res, next) {
         if (name          !== undefined) data.name          = name;
         if (description   !== undefined) data.description   = description || null;
         if (category      !== undefined) data.category      = category;
+        if (subcategory   !== undefined) data.subcategory   = subcategory || null;
         if (slug          !== undefined) data.slug          = slug;
         if (price         !== undefined) data.price         = Number(price);
         if (deliveryFee   !== undefined) data.deliveryFee   = Number(deliveryFee);
