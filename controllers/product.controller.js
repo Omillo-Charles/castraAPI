@@ -24,19 +24,21 @@ export async function getProducts(req, res, next) {
         const skip     = (pageNum - 1) * limitNum;
 
         const where = { active: true };
-        if (category) {
+        if (category && category.toLowerCase() !== "all") {
             const slugified = category.toLowerCase().replace(/\s+/g, "-");
             where.OR = [
                 { category: { equals: category, mode: "insensitive" } },
                 { slug:     { equals: category, mode: "insensitive" } },
                 { slug:     { equals: slugified, mode: "insensitive" } },
             ];
-        } else {
-            // When no category filter is applied (the "All" view on the main grid),
-            // exclude Kicks — they have their own dedicated /kicks page and should
-            // not appear in the general product grid.
+        } else if (!category) {
+            // No category param = public "All" view on the home page grid.
+            // Exclude Kicks — they have their own dedicated /kicks page.
+            // Passing category=all explicitly (admin panel) skips this exclusion
+            // so admins can see every product regardless of category.
             where.NOT = { category: { equals: "kicks", mode: "insensitive" } };
         }
+        // category === "all" → no filter, no exclusion — return everything
 
         if (subcategory) {
             const subSlugified = subcategory.toLowerCase().replace(/\s+/g, "-");
