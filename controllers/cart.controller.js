@@ -36,10 +36,48 @@ function computeTotals(cart) {
     return { subtotal, discount, deliveryFee, total };
 }
 
+async function refreshCartCoupon(cart) {
+    if (!cart.couponCode) return cart;
+
+    const coupon = await prisma.coupon.findUnique({ where: { code: cart.couponCode } });
+    const subtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
+    const now = new Date();
+    const couponIsValid = coupon
+        && coupon.active
+        && (!coupon.validFrom || coupon.validFrom <= now)
+        && (!coupon.validUntil || coupon.validUntil >= now)
+        && subtotal >= coupon.minOrderTotal
+        && (coupon.usageLimit === null || coupon.usedCount < coupon.usageLimit);
+
+    if (!couponIsValid) {
+        await prisma.cart.update({
+            where: { id: cart.id },
+            data: { couponCode: null, discount: 0 },
+        });
+        return { ...cart, couponCode: null, discount: 0 };
+    }
+
+    const discount = Math.min(coupon.amount, subtotal);
+    if (cart.discount !== discount) {
+        await prisma.cart.update({
+            where: { id: cart.id },
+            data: { discount },
+        });
+        return { ...cart, discount };
+    }
+
+    return cart;
+}
+
+async function getCartWithValidCoupon(cartOwner) {
+    const cart = await getOrCreateCart(cartOwner);
+    return refreshCartCoupon(cart);
+}
+
 // GET /api/v1/cart 
 export async function getCart(req, res, next) {
     try {
-        const cart   = await getOrCreateCart(req.cartOwner);
+        const cart   = await getCartWithValidCoupon(req.cartOwner);
         const totals = computeTotals(cart);
         return res.status(200).json({ success: true, cart: { ...cart, ...totals } });
     } catch (error) {
@@ -68,7 +106,7 @@ export async function addItem(req, res, next) {
             create: { cartId: cart.id, productId, qty: Number(qty) },
         });
 
-        const updated = await getOrCreateCart(req.cartOwner);
+        const updated = await getCartWithValidCoupon(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
@@ -93,7 +131,7 @@ export async function updateItem(req, res, next) {
             await prisma.cartItem.update({ where: { id: item.id }, data: { qty } });
         }
 
-        const updated = await getOrCreateCart(req.cartOwner);
+        const updated = await getCartWithValidCoupon(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
@@ -110,7 +148,7 @@ export async function removeItem(req, res, next) {
 
         await prisma.cartItem.delete({ where: { id: item.id } });
 
-        const updated = await getOrCreateCart(req.cartOwner);
+        const updated = await getCartWithValidCoupon(req.cartOwner);
         return res.status(200).json({ success: true, cart: { ...updated, ...computeTotals(updated) } });
     } catch (error) {
         next(error);
