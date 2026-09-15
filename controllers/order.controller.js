@@ -82,12 +82,15 @@ export async function placeOrder(req, res, next) {
         const total       = subtotal - discount;
 
         // ── Transaction: create order + deduct stock + clear cart ──
+        const couponCode = cart.couponCode ?? null;
+
         const order = await prisma.$transaction(async (tx) => {
             const created = await tx.order.create({
                 data: {
                     ref:       generateRef(),
                     userId:    owner.type === "user" ? owner.userId : null,
                     sessionId: owner.type === "guest" ? owner.sessionId : null,
+                    couponCode,
                     firstName:  contact.firstName,
                     lastName:   contact.lastName,
                     email:      contact.email ?? null,
@@ -112,6 +115,25 @@ export async function placeOrder(req, res, next) {
                 },
                 include: { items: true },
             });
+
+            if (couponCode) {
+                const coupon = await tx.coupon.findUnique({ where: { code: couponCode } });
+                if (coupon) {
+                    await tx.coupon.update({
+                        where: { id: coupon.id },
+                        data: { usedCount: coupon.usedCount + 1 },
+                    });
+
+                    await tx.couponUsage.create({
+                        data: {
+                            couponId: coupon.id,
+                            userId: owner.type === "user" ? owner.userId : null,
+                            sessionId: owner.type === "guest" ? owner.sessionId : null,
+                            orderId: created.id,
+                        },
+                    });
+                }
+            }
 
             await Promise.all(
                 cart.items.map((item) => {

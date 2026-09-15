@@ -59,11 +59,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  addresses Address[]
-  cart      Cart?
-  wishlist  Wishlist?
-  orders    Order[]
+  addresses     Address[]
+  cart          Cart?
+  wishlist      Wishlist?
+  orders        Order[]
   refreshTokens RefreshToken[]
+  couponUsages  CouponUsage[]
 
   @@map("users")
 }
@@ -174,11 +175,12 @@ model WishlistItem {
 // Order 
 
 model Order {
-  id        String  @id @default(cuid())
-  ref       String  @unique // e.g. CST-20250727-0041
-  userId    String? // null for guest orders
-  sessionId String? // set for guest orders so they can be looked up by session
-  addressId String? // null if address was entered manually (not saved)
+  id          String  @id @default(cuid())
+  ref         String  @unique // e.g. CST-20250727-0041
+  userId      String? // null for guest orders
+  sessionId   String? // set for guest orders so they can be looked up by session
+  addressId   String? // null if address was entered manually (not saved)
+  couponCode  String?
 
   // Contact snapshot (captured at checkout, survives address edits)
   firstName String
@@ -202,10 +204,11 @@ model Order {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  user    User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  address Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  items   OrderItem[]
-  payment Payment?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  address     Address?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  items       OrderItem[]
+  payment     Payment?
+  couponUsages CouponUsage[]
 
   @@map("orders")
 }
@@ -259,4 +262,42 @@ model Payment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
+}
+
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  description   String?
+  amount        Int
+  active        Boolean      @default(true)
+  minOrderTotal Int          @default(0)
+  usageLimit    Int?
+  usedCount     Int          @default(0)
+  validFrom     DateTime?
+  validUntil    DateTime?
+  createdBy     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  usages CouponUsage[]
+
+  @@map("coupons")
+}
+
+model CouponUsage {
+  id        String    @id @default(cuid())
+  couponId  String
+  userId    String?
+  sessionId String?
+  orderId   String?
+  usedAt    DateTime  @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([couponId])
+  @@index([userId])
+  @@index([sessionId])
+  @@map("coupon_usages")
 }

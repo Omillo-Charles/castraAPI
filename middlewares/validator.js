@@ -143,6 +143,36 @@ export const applyCouponSchema = z.object({
     code: z.string({ required_error: "Coupon code is required." }).min(1, "Coupon code cannot be empty.").trim().toUpperCase(),
 });
 
+export const createCouponSchema = z.object({
+    code: z.string({ required_error: "Coupon code is required." }).min(3, "Coupon code must be at least 3 characters.").max(32, "Coupon code is too long.").trim().toUpperCase(),
+    description: z.string().max(200, "Description is too long.").trim().optional().nullable(),
+    amount: z.coerce.number({ required_error: "Discount amount is required." }).int("Discount amount must be a whole number.").min(1, "Discount amount must be greater than zero."),
+    active: z.boolean().optional().default(true),
+    minOrderTotal: z.coerce.number().int("Minimum order total must be a whole number.").min(0, "Minimum order total cannot be negative.").optional().default(0),
+    usageLimit: z.coerce.number().int("Usage limit must be a whole number.").min(1, "Usage limit must be at least 1.").nullable().optional(),
+    validFrom: z.string().datetime({ message: "validFrom must be an ISO date string." }).nullable().optional().or(z.literal("")),
+    validUntil: z.string().datetime({ message: "validUntil must be an ISO date string." }).nullable().optional().or(z.literal("")),
+}).transform((data) => ({
+    ...data,
+    validFrom: data.validFrom ? new Date(data.validFrom) : null,
+    validUntil: data.validUntil ? new Date(data.validUntil) : null,
+}));
+
+export const updateCouponSchema = z.object({
+    code: z.string().min(3, "Coupon code must be at least 3 characters.").max(32, "Coupon code is too long.").trim().toUpperCase().optional(),
+    description: z.string().max(200, "Description is too long.").trim().optional().nullable(),
+    amount: z.coerce.number().int("Discount amount must be a whole number.").min(1, "Discount amount must be greater than zero.").optional(),
+    active: z.boolean().optional(),
+    minOrderTotal: z.coerce.number().int("Minimum order total must be a whole number.").min(0, "Minimum order total cannot be negative.").optional(),
+    usageLimit: z.coerce.number().int("Usage limit must be a whole number.").min(1, "Usage limit must be at least 1.").nullable().optional(),
+    validFrom: z.string().datetime({ message: "validFrom must be an ISO date string." }).nullable().optional().or(z.literal("")),
+    validUntil: z.string().datetime({ message: "validUntil must be an ISO date string." }).nullable().optional().or(z.literal("")),
+}).refine((data) => Object.keys(data).length > 0, { message: "Provide at least one field to update." }).transform((data) => ({
+    ...data,
+    validFrom: data.validFrom ? new Date(data.validFrom) : null,
+    validUntil: data.validUntil ? new Date(data.validUntil) : null,
+}));
+
 // Wishlist schemas
 
 export const addWishlistSchema = z.object({

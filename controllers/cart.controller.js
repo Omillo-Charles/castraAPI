@@ -132,8 +132,57 @@ export async function clearCart(req, res, next) {
 // POST /api/v1/cart/coupon
 export async function applyCoupon(req, res, next) {
     try {
-        // Placeholder — no coupon table yet
-        throw new AppError("Invalid or expired coupon code.", 400);
+        const { code } = req.body;
+        const cart = await prisma.cart.findUnique({
+            where: req.cartOwner.type === "user"
+                ? { userId: req.cartOwner.userId }
+                : { sessionId: req.cartOwner.sessionId },
+            include: {
+                items: { include: { product: true }, orderBy: { createdAt: "asc" } },
+            },
+        });
+
+        if (!cart || cart.items.length === 0) {
+            throw new AppError("Your cart is empty.", 400);
+        }
+
+        const couponCode = String(code).trim().toUpperCase();
+        const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
+
+        if (!coupon) {
+            throw new AppError("Invalid coupon code.", 400);
+        }
+
+        const now = new Date();
+        if (!coupon.active || (coupon.validFrom && coupon.validFrom > now) || (coupon.validUntil && coupon.validUntil < now)) {
+            throw new AppError("This coupon is not active or has expired.", 400);
+        }
+
+        const subtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
+        if (subtotal < coupon.minOrderTotal) {
+            throw new AppError(`This coupon requires a minimum order of KSh ${coupon.minOrderTotal.toLocaleString("en-KE")}.`, 400);
+        }
+
+        if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+            throw new AppError("This coupon has reached its usage limit.", 400);
+        }
+
+        const discount = Math.min(coupon.amount, subtotal);
+
+        const updatedCart = await prisma.cart.update({
+            where: { id: cart.id },
+            data: { couponCode: coupon.code, discount },
+            include: {
+                items: { include: { product: true }, orderBy: { createdAt: "asc" } },
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Coupon applied successfully.",
+            discount,
+            cart: { ...updatedCart, subtotal, deliveryFee: 0, total: subtotal - discount },
+        });
     } catch (error) {
         next(error);
     }

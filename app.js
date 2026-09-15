@@ -15,6 +15,7 @@ import cartRouter from "./routes/cart.routes.js";
 import wishlistRouter from "./routes/wishlist.routes.js";
 import paymentRouter from "./routes/payment.routes.js";
 import orderRouter from "./routes/order.routes.js";
+import couponRouter from "./routes/coupon.routes.js";
 import { globalLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.js";
 
@@ -68,6 +69,7 @@ app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/wishlist", wishlistRouter);
 app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/orders", orderRouter);
+app.use("/api/v1/coupons", couponRouter);
 
 // We also mount the callback at the root /payment/mpesa/callback since Daraja config often points there
 app.use("/payment", paymentRouter);
