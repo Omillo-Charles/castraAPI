@@ -9,7 +9,7 @@ import { logger } from "../middlewares/logger.js";
 // Helpers 
 
 function generateRef() {
-    const now  = new Date();
+    const now = new Date();
     const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const rand = String(Math.floor(1000 + Math.random() * 9000));
     return `CST-${date}-${rand}`;
@@ -50,14 +50,14 @@ export async function placeOrder(req, res, next) {
         const { contact, delivery, payment: paymentData } = req.body;
 
         // ── Resolve cart owner (user or guest) ──
-        const owner     = req.cartOwner;
+        const owner = req.cartOwner;
         const cartWhere = owner.type === "user"
-            ? { userId:    owner.userId }
+            ? { userId: owner.userId }
             : { sessionId: owner.sessionId };
 
         // ── Fetch cart ──
         const cart = await prisma.cart.findUnique({
-            where:   cartWhere,
+            where: cartWhere,
             include: { items: { include: { product: true } } },
         });
 
@@ -76,10 +76,10 @@ export async function placeOrder(req, res, next) {
         }
 
         // ── Totals ──
-        const subtotal    = cart.items.reduce((s, i) => s + i.product.price * i.qty, 0);
+        const subtotal = cart.items.reduce((s, i) => s + i.product.price * i.qty, 0);
         const deliveryFee = 0;
-        const discount    = cart.discount ?? 0;
-        const total       = subtotal - discount;
+        const discount = cart.discount ?? 0;
+        const total = subtotal - discount;
 
         // ── Transaction: create order + deduct stock + clear cart ──
         const couponCode = cart.couponCode ?? null;
@@ -87,18 +87,18 @@ export async function placeOrder(req, res, next) {
         const order = await prisma.$transaction(async (tx) => {
             const created = await tx.order.create({
                 data: {
-                    ref:       generateRef(),
-                    userId:    owner.type === "user" ? owner.userId : null,
+                    ref: generateRef(),
+                    userId: owner.type === "user" ? owner.userId : null,
                     sessionId: owner.type === "guest" ? owner.sessionId : null,
                     couponCode,
-                    firstName:  contact.firstName,
-                    lastName:   contact.lastName,
-                    email:      contact.email ?? null,
-                    phone:      contact.phone,
-                    street:     delivery.street,
-                    city:       delivery.city,
-                    county:     delivery.county,
-                    notes:      delivery.notes ?? null,
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                    email: contact.email ?? null,
+                    phone: contact.phone,
+                    street: delivery.street,
+                    city: delivery.city,
+                    county: delivery.county,
+                    notes: delivery.notes ?? null,
                     subtotal,
                     deliveryFee,
                     discount,
@@ -107,9 +107,9 @@ export async function placeOrder(req, res, next) {
                     items: {
                         create: cart.items.map((i) => ({
                             productId: i.productId,
-                            name:      i.product.name,
-                            price:     i.product.price,
-                            qty:       i.qty,
+                            name: i.product.name,
+                            price: i.product.price,
+                            qty: i.qty,
                         })),
                     },
                 },
@@ -140,7 +140,7 @@ export async function placeOrder(req, res, next) {
                     const newStock = item.product.stock - item.qty;
                     return tx.product.update({
                         where: { id: item.productId },
-                        data:  { stock: newStock, inStock: newStock > 0 },
+                        data: { stock: newStock, inStock: newStock > 0 },
                     });
                 })
             );
@@ -152,16 +152,16 @@ export async function placeOrder(req, res, next) {
         }, { timeout: 15000, maxWait: 5000, isolationLevel: "ReadCommitted" });
 
         // ── Payment ──
-        const isManual   = paymentData.method === "manual";
-        const dbMethod   = isManual ? "MPESA_MANUAL" : "MPESA_STK";
+        const isManual = paymentData.method === "manual";
+        const dbMethod = isManual ? "MPESA_MANUAL" : "MPESA_STK";
 
         let paymentRecord = await prisma.payment.create({
             data: {
-                orderId:  order.id,
-                method:   dbMethod,
-                amount:   total,
+                orderId: order.id,
+                method: dbMethod,
+                amount: total,
                 stkPhone: isManual ? null : (paymentData.stkPhone ?? null),
-                status:   "PENDING",
+                status: "PENDING",
             },
         });
 
@@ -177,15 +177,15 @@ export async function placeOrder(req, res, next) {
             if (normalisedPhone) {
                 try {
                     const stkRes = await initiateSTKPush({
-                        amount:      total,
-                        phone:       normalisedPhone,
-                        orderId:     order.id,
+                        amount: total,
+                        phone: normalisedPhone,
+                        orderId: order.id,
                         description: "CastraOrder",
                     });
 
                     paymentRecord = await prisma.payment.update({
                         where: { id: paymentRecord.id },
-                        data:  { stkPhone: normalisedPhone, checkoutRequestId: stkRes.CheckoutRequestID ?? null },
+                        data: { stkPhone: normalisedPhone, checkoutRequestId: stkRes.CheckoutRequestID ?? null },
                     });
 
                     stkDetails = { checkoutRequestId: stkRes.CheckoutRequestID, customerMessage: stkRes.CustomerMessage };
@@ -193,7 +193,7 @@ export async function placeOrder(req, res, next) {
                     logger.error("[placeOrder] STK push failed", stkError);
                     paymentRecord = await prisma.payment.update({
                         where: { id: paymentRecord.id },
-                        data:  { status: "FAILED" },
+                        data: { status: "FAILED" },
                     });
                 }
             }
@@ -201,14 +201,14 @@ export async function placeOrder(req, res, next) {
 
         // ── Emails ──
         const orderItems = cart.items.map((i) => ({
-            name:     i.product.name,
+            name: i.product.name,
             quantity: i.qty,
-            price:    i.product.price,
-            image:    i.product.images?.[0] ?? null,
+            price: i.product.price,
+            image: i.product.images?.[0] ?? null,
             category: i.product.category ?? null,
         }));
-        const orderUrl  = `${FRONTEND_URL}/track-order?q=${order.ref}`;
-        const adminUrl  = `${FRONTEND_URL}/account/dashboard/admin`;
+        const orderUrl = `${FRONTEND_URL}/track-order?q=${order.ref}`;
+        const adminUrl = `${FRONTEND_URL}/account/dashboard/admin`;
 
         // Use the email saved on the order record — it was captured at checkout
         // and is the most reliable source. Falls back to the JWT user email for
@@ -228,18 +228,18 @@ export async function placeOrder(req, res, next) {
             sendMail({
                 to: ADMIN_EMAIL,
                 ...buildAdminOrderEmail({
-                    customerName:    `${contact.firstName} ${contact.lastName}`,
-                    customerEmail:   order.email ?? (owner.type === "user" ? req.user?.email : null) ?? "",
-                    customerPhone:   contact.phone,
-                    orderId:         order.ref,
-                    items:           orderItems,
+                    customerName: `${contact.firstName} ${contact.lastName}`,
+                    customerEmail: order.email ?? (owner.type === "user" ? req.user?.email : null) ?? "",
+                    customerPhone: contact.phone,
+                    orderId: order.ref,
+                    items: orderItems,
                     subtotal,
                     total,
                     shippingAddress: `${delivery.street}, ${delivery.city}, ${delivery.county}`,
-                    paymentMethod:   dbMethod,
-                    paymentStatus:   paymentRecord?.status ?? "PENDING",
-                    stkPhone:        isManual ? "" : (paymentData.stkPhone ?? ""),
-                    orderUrl:        adminUrl,
+                    paymentMethod: dbMethod,
+                    paymentStatus: paymentRecord?.status ?? "PENDING",
+                    stkPhone: isManual ? "" : (paymentData.stkPhone ?? ""),
+                    orderUrl: adminUrl,
                 }),
             }).catch((e) => logger.error("[placeOrder] admin email failed", e));
         }
@@ -247,11 +247,11 @@ export async function placeOrder(req, res, next) {
         return res.status(201).json({
             success: true,
             order: {
-                id:     order.id,
-                ref:    order.ref,
+                id: order.id,
+                ref: order.ref,
                 total,
                 status: order.status,
-                items:  order.items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+                items: order.items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
             },
             payment: paymentRecord
                 ? { id: paymentRecord.id, method: paymentRecord.method, status: paymentRecord.status }
@@ -266,22 +266,22 @@ export async function placeOrder(req, res, next) {
 // GET /api/v1/orders
 export async function getOrders(req, res, next) {
     try {
-        const isAdmin  = req.user.role === "ADMIN";
+        const isAdmin = req.user.role === "ADMIN";
         const { status, search, page = "1", limit = "10" } = req.query;
 
-        const pageNum  = Math.max(1, parseInt(page));
+        const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-        const skip     = (pageNum - 1) * limitNum;
+        const skip = (pageNum - 1) * limitNum;
 
         const where = {};
         if (!isAdmin) where.userId = req.user.id;
-        if (status)   where.status = status.toUpperCase();
+        if (status) where.status = status.toUpperCase();
         if (isAdmin && search) {
             where.OR = [
-                { ref:       { contains: search, mode: "insensitive" } },
+                { ref: { contains: search, mode: "insensitive" } },
                 { firstName: { contains: search, mode: "insensitive" } },
-                { lastName:  { contains: search, mode: "insensitive" } },
-                { phone:     { contains: search } },
+                { lastName: { contains: search, mode: "insensitive" } },
+                { phone: { contains: search } },
             ];
         }
 
@@ -304,35 +304,35 @@ export async function getOrders(req, res, next) {
 export async function getOrderCustomers(req, res, next) {
     try {
         const { search = "", page = "1", limit = "8" } = req.query;
-        const pageNum  = Math.max(1, parseInt(page));
+        const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-        const query    = String(search).trim();
+        const query = String(search).trim();
 
         const where = query ? {
             OR: [
                 { firstName: { contains: query, mode: "insensitive" } },
-                { lastName:  { contains: query, mode: "insensitive" } },
-                { email:     { contains: query, mode: "insensitive" } },
-                { phone:     { contains: query } },
+                { lastName: { contains: query, mode: "insensitive" } },
+                { email: { contains: query, mode: "insensitive" } },
+                { phone: { contains: query } },
             ],
         } : {};
 
         const orders = await prisma.order.findMany({
             where,
             orderBy: { createdAt: "desc" },
-            select:  { id: true, firstName: true, lastName: true, email: true, phone: true, total: true, createdAt: true },
+            select: { id: true, firstName: true, lastName: true, email: true, phone: true, total: true, createdAt: true },
         });
 
         const byPhone = new Map();
         for (const o of orders) {
             const key = o.phone.replace(/\D/g, "") || o.phone;
-            const ex  = byPhone.get(key);
+            const ex = byPhone.get(key);
             if (ex) {
                 ex.orders += 1;
-                ex.total  += o.total;
+                ex.total += o.total;
                 if (o.createdAt > ex.lastOrderAt) {
                     ex.lastOrderAt = o.createdAt;
-                    ex.name  = `${o.firstName} ${o.lastName}`;
+                    ex.name = `${o.firstName} ${o.lastName}`;
                     ex.email = o.email;
                     ex.phone = o.phone;
                 }
@@ -341,8 +341,8 @@ export async function getOrderCustomers(req, res, next) {
             }
         }
 
-        const customers   = Array.from(byPhone.values()).sort((a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
-        const total       = customers.length;
+        const customers = Array.from(byPhone.values()).sort((a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
+        const total = customers.length;
         const pagedCustomers = customers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
         return res.status(200).json({
@@ -359,10 +359,10 @@ export async function getOrderCustomers(req, res, next) {
 export async function getOrder(req, res, next) {
     try {
         const { idOrRef } = req.params;
-        const isAdmin     = req.user.role === "ADMIN";
+        const isAdmin = req.user.role === "ADMIN";
 
         const order = await prisma.order.findFirst({
-            where:  { OR: [{ id: idOrRef }, { ref: idOrRef }], ...(!isAdmin && { userId: req.user.id }) },
+            where: { OR: [{ id: idOrRef }, { ref: idOrRef }], ...(!isAdmin && { userId: req.user.id }) },
             select: USER_ORDER_SELECT,
         });
 
@@ -382,7 +382,7 @@ export async function trackOrder(req, res, next) {
         const order = await prisma.order.findFirst({
             where: {
                 OR: [
-                    { ref:   { equals: q.trim(), mode: "insensitive" } },
+                    { ref: { equals: q.trim(), mode: "insensitive" } },
                     { phone: { contains: q.trim() } },
                 ],
             },
@@ -399,7 +399,7 @@ export async function trackOrder(req, res, next) {
 // PATCH /api/v1/orders/:id/status
 export async function updateOrderStatus(req, res, next) {
     try {
-        const { id }     = req.params;
+        const { id } = req.params;
         const { status } = req.body;
 
         const existing = await prisma.order.findUnique({ where: { id } });
@@ -412,15 +412,15 @@ export async function updateOrderStatus(req, res, next) {
                 to: order.email,
                 ...buildOrderStatusEmail({
                     customerName: order.firstName,
-                    orderId:      order.ref,
-                    orderStatus:  status,
-                    items:        order.items.map((i) => ({
-                        name:     i.name,
+                    orderId: order.ref,
+                    orderStatus: status,
+                    items: order.items.map((i) => ({
+                        name: i.name,
                         quantity: i.qty,
-                        price:    i.price,
-                        image:    i.product?.images?.[0] ?? null,
+                        price: i.price,
+                        image: i.product?.images?.[0] ?? null,
                     })),
-                    total:    order.total,
+                    total: order.total,
                     orderUrl: `${FRONTEND_URL}/track-order?q=${order.ref}`,
                 }),
             }).catch((e) => logger.error("[updateOrderStatus] email failed", e));

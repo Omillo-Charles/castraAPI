@@ -11,14 +11,14 @@ const CART_INCLUDE = {
 // cartOwner: { type: "user"|"guest", userId?: string, sessionId?: string }
 async function getOrCreateCart(cartOwner) {
     const where = cartOwner.type === "user"
-        ? { userId:    cartOwner.userId }
+        ? { userId: cartOwner.userId }
         : { sessionId: cartOwner.sessionId };
 
     let cart = await prisma.cart.findUnique({ where, include: CART_INCLUDE });
 
     if (!cart) {
         cart = await prisma.cart.create({
-            data:    cartOwner.type === "user"
+            data: cartOwner.type === "user"
                 ? { userId: cartOwner.userId }
                 : { sessionId: cartOwner.sessionId },
             include: CART_INCLUDE,
@@ -29,10 +29,10 @@ async function getOrCreateCart(cartOwner) {
 }
 
 function computeTotals(cart) {
-    const subtotal    = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
+    const subtotal = cart.items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
     const deliveryFee = 0;
-    const discount    = cart.discount ?? 0;
-    const total       = subtotal - discount;
+    const discount = cart.discount ?? 0;
+    const total = subtotal - discount;
     return { subtotal, discount, deliveryFee, total };
 }
 
@@ -77,7 +77,7 @@ async function getCartWithValidCoupon(cartOwner) {
 // GET /api/v1/cart 
 export async function getCart(req, res, next) {
     try {
-        const cart   = await getCartWithValidCoupon(req.cartOwner);
+        const cart = await getCartWithValidCoupon(req.cartOwner);
         const totals = computeTotals(cart);
         return res.status(200).json({ success: true, cart: { ...cart, ...totals } });
     } catch (error) {
@@ -94,14 +94,14 @@ export async function addItem(req, res, next) {
         if (!product || !product.active) throw new AppError("Product not found or unavailable.", 404);
         if (!product.inStock || product.stock < qty) throw new AppError("Insufficient stock.", 400);
 
-        const cart     = await getOrCreateCart(req.cartOwner);
+        const cart = await getOrCreateCart(req.cartOwner);
         const existing = cart.items.find(i => i.productId === productId);
-        const newQty   = (existing?.qty ?? 0) + Number(qty);
+        const newQty = (existing?.qty ?? 0) + Number(qty);
 
         if (newQty > product.stock) throw new AppError("Requested quantity exceeds available stock.", 400);
 
         await prisma.cartItem.upsert({
-            where:  { cartId_productId: { cartId: cart.id, productId } },
+            where: { cartId_productId: { cartId: cart.id, productId } },
             update: { qty: newQty },
             create: { cartId: cart.id, productId, qty: Number(qty) },
         });
@@ -117,7 +117,7 @@ export async function addItem(req, res, next) {
 export async function updateItem(req, res, next) {
     try {
         const { productId } = req.params;
-        const qty           = Number(req.body.qty);
+        const qty = Number(req.body.qty);
 
         const cart = await getOrCreateCart(req.cartOwner);
         const item = cart.items.find(i => i.productId === productId);
@@ -142,8 +142,8 @@ export async function updateItem(req, res, next) {
 export async function removeItem(req, res, next) {
     try {
         const { productId } = req.params;
-        const cart          = await getOrCreateCart(req.cartOwner);
-        const item          = cart.items.find(i => i.productId === productId);
+        const cart = await getOrCreateCart(req.cartOwner);
+        const item = cart.items.find(i => i.productId === productId);
         if (!item) throw new AppError("Item not in cart.", 404);
 
         await prisma.cartItem.delete({ where: { id: item.id } });

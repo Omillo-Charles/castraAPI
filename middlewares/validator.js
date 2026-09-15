@@ -11,7 +11,7 @@ export function validate(schema) {
 
         if (!result.success) {
             const errors = result.error.errors.map((e) => ({
-                field:   e.path.join(".") || "body",
+                field: e.path.join(".") || "body",
                 message: e.message,
             }));
 
@@ -71,10 +71,10 @@ const positiveInt = (field) =>
 
 export const registerSchema = z.object({
     firstName: name.describe("First name"),
-    lastName:  name.describe("Last name"),
+    lastName: name.describe("Last name"),
     email,
     password,
-    phone:     phone.optional(),
+    phone: phone.optional(),
 });
 
 export const loginSchema = z.object({
@@ -87,8 +87,8 @@ export const loginSchema = z.object({
 export const updateProfileSchema = z
     .object({
         firstName: name.optional(),
-        lastName:  name.optional(),
-        phone:     phone.nullable().optional(),
+        lastName: name.optional(),
+        phone: phone.nullable().optional(),
     })
     .refine(
         (data) => data.firstName || data.lastName || data.phone !== undefined,
@@ -98,29 +98,29 @@ export const updateProfileSchema = z
 export const changePasswordSchema = z
     .object({
         currentPassword: z.string({ required_error: "Current password is required." }).min(1),
-        newPassword:     password,
+        newPassword: password,
     })
     .refine((data) => data.currentPassword !== data.newPassword, {
-        path:    ["newPassword"],
+        path: ["newPassword"],
         message: "New password must be different from the current password.",
     });
 
 // Address schemas
 
 export const createAddressSchema = z.object({
-    label:     z.string().min(1, "Label is required.").max(32, "Label is too long.").trim(),
-    street:    z.string().min(2, "Street address is required.").max(128).trim(),
-    city:      z.string().min(1, "City is required.").max(64).trim(),
-    county:    z.string().min(1, "County is required.").max(64).trim(),
+    label: z.string().min(1, "Label is required.").max(32, "Label is too long.").trim(),
+    street: z.string().min(2, "Street address is required.").max(128).trim(),
+    city: z.string().min(1, "City is required.").max(64).trim(),
+    county: z.string().min(1, "County is required.").max(64).trim(),
     isDefault: z.boolean().optional().default(false),
 });
 
 export const updateAddressSchema = z
     .object({
-        label:     z.string().min(1).max(32).trim().optional(),
-        street:    z.string().min(2).max(128).trim().optional(),
-        city:      z.string().min(1).max(64).trim().optional(),
-        county:    z.string().min(1).max(64).trim().optional(),
+        label: z.string().min(1).max(32).trim().optional(),
+        street: z.string().min(2).max(128).trim().optional(),
+        city: z.string().min(1).max(64).trim().optional(),
+        county: z.string().min(1).max(64).trim().optional(),
         isDefault: z.boolean().optional(),
     })
     .refine(
@@ -182,31 +182,31 @@ export const addWishlistSchema = z.object({
 // Product schemas (admin)
 
 export const createProductSchema = z.object({
-    name:          z.string().min(1, "Product name is required.").max(128).trim(),
-    description:   z.string().max(2000, "Description is too long.").trim().optional().nullable(),
-    category:      z.string().min(1, "Category is required.").max(64).trim(),
-    subcategory:   z.string().max(64).trim().optional().nullable(),
-    slug:          z.string().min(1, "Slug is required.").max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").trim(),
-    price:         positiveInt("Price"),
-    stock:         z.coerce.number().int().min(0, "Stock cannot be negative."),
+    name: z.string().min(1, "Product name is required.").max(128).trim(),
+    description: z.string().max(2000, "Description is too long.").trim().optional().nullable(),
+    category: z.string().min(1, "Category is required.").max(64).trim(),
+    subcategory: z.string().max(64).trim().optional().nullable(),
+    slug: z.string().min(1, "Slug is required.").max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").trim(),
+    price: positiveInt("Price"),
+    stock: z.coerce.number().int().min(0, "Stock cannot be negative."),
     originalPrice: z.coerce.number().int().positive().optional().nullable(),
-    active:        z.enum(["true", "false"]).optional().default("true"),
-    deliveryFee:   z.coerce.number().int().min(0).optional().default(0),
+    active: z.enum(["true", "false"]).optional().default("true"),
+    deliveryFee: z.coerce.number().int().min(0).optional().default(0),
 });
 
 export const updateProductSchema = z
     .object({
-        name:          z.string().min(1).max(128).trim().optional(),
-        description:   z.string().max(2000, "Description is too long.").trim().optional().nullable(),
-        category:      z.string().min(1).max(64).trim().optional(),
-        subcategory:   z.string().max(64).trim().optional().nullable(),
-        slug:          z.string().min(1).max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").optional(),
-        price:         z.coerce.number().int().positive().optional(),
-        stock:         z.coerce.number().int().min(0).optional(),
+        name: z.string().min(1).max(128).trim().optional(),
+        description: z.string().max(2000, "Description is too long.").trim().optional().nullable(),
+        category: z.string().min(1).max(64).trim().optional(),
+        subcategory: z.string().max(64).trim().optional().nullable(),
+        slug: z.string().min(1).max(128).regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers and hyphens.").optional(),
+        price: z.coerce.number().int().positive().optional(),
+        stock: z.coerce.number().int().min(0).optional(),
         originalPrice: z.coerce.number().int().positive().optional().nullable(),
-        active:        z.enum(["true", "false"]).optional(),
+        active: z.enum(["true", "false"]).optional(),
         replaceImages: z.enum(["true", "false"]).optional(),
-        deliveryFee:   z.coerce.number().int().min(0).optional(),
+        deliveryFee: z.coerce.number().int().min(0).optional(),
     })
     .refine(
         (data) => Object.keys(data).length > 0,
@@ -218,18 +218,18 @@ export const updateProductSchema = z
 export const placeOrderSchema = z.object({
     contact: z.object({
         firstName: name,
-        lastName:  name,
+        lastName: name,
         email,
         phone,
     }),
     delivery: z.object({
         street: z.string().min(2, "Street address is required.").max(128).trim(),
-        city:   z.string().min(1, "City is required.").max(64).trim(),
+        city: z.string().min(1, "City is required.").max(64).trim(),
         county: z.string().min(1, "County is required.").max(64).trim(),
-        notes:  z.string().max(256).trim().optional(),
+        notes: z.string().max(256).trim().optional(),
     }),
     payment: z.object({
-        method:   z.enum(["mpesa-stk", "manual"], {
+        method: z.enum(["mpesa-stk", "manual"], {
             errorMap: () => ({ message: "payment.method must be 'mpesa-stk' or 'manual'." }),
         }),
         stkPhone: phone.optional(),
@@ -254,7 +254,7 @@ export const stkPushSchema = z.object({
 });
 
 export const updatePaymentStatusSchema = z.object({
-    status:             z.enum(["PENDING", "PAID", "FAILED"], {
+    status: z.enum(["PENDING", "PAID", "FAILED"], {
         errorMap: () => ({ message: "status must be PENDING, PAID, or FAILED." }),
     }),
     mpesaReceiptNumber: z.string().trim().optional(),

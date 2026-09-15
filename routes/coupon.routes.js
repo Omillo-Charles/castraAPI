@@ -1,11 +1,11 @@
 import { Router } from "express";
 import {
-  listCoupons,
-  createCoupon,
-  updateCoupon,
-  deleteCoupon,
-  getCoupon,
-  applyCoupon,
+    listCoupons,
+    createCoupon,
+    updateCoupon,
+    deleteCoupon,
+    getCoupon,
+    applyCoupon,
 } from "../controllers/coupon.controller.js";
 import { requireAuth, requireAdmin } from "../middlewares/requireAuth.js";
 import { resolveCart } from "../middlewares/resolveCart.js";
