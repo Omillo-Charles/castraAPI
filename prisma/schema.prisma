@@ -25,8 +25,8 @@ enum OrderStatus {
 }
 
 enum PaymentMethod {
-  MPESA_STK
   MPESA_MANUAL
+  PAYSTACK_MPESA_STK
 }
 
 enum PaymentStatus {
@@ -251,10 +251,18 @@ model Payment {
   status  PaymentStatus @default(PENDING)
   amount  Int // in KES
 
-  // M-Pesa STK Push
-  stkPhone           String? // phone number the prompt was sent to
-  checkoutRequestId  String? // Daraja CheckoutRequestID for polling
-  mpesaReceiptNumber String? // receipt from Daraja callback
+  // Manual M-Pesa receipt recorded by an administrator
+  mpesaReceiptNumber String?
+
+  // Paystack M-Pesa STK
+  paystackReference        String?   @unique
+  paystackTransactionId    Int?
+  paystackAccessCode       String?
+  paystackAuthorizationUrl String?
+  paystackChannel          String?
+  paystackGatewayResponse  String?
+  paystackCurrency         String?
+  paystackPaidAt           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -262,6 +270,20 @@ model Payment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
+}
+
+model PaystackWebhookEvent {
+  id            String   @id @default(cuid())
+  eventKey      String   @unique
+  event         String
+  reference     String?
+  transactionId Int?
+  payload       Json
+  receivedAt    DateTime @default(now())
+
+  @@index([reference])
+  @@index([transactionId])
+  @@map("paystack_webhook_events")
 }
 
 model Coupon {

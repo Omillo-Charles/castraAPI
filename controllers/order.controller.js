@@ -1,5 +1,5 @@
 import prisma from "../database/neon.js";
-import { initiateSTKPush, normalisePhone } from "../config/mpesa.js";
+import paystack from "../config/paystack.js";
 import { sendMail } from "../config/resend.js";
 import { buildUserOrderEmail, buildAdminOrderEmail, buildOrderStatusEmail } from "../utils/emailTemplates.js";
 import { FRONTEND_URL, ADMIN_EMAIL } from "../config/env.js";
@@ -29,7 +29,7 @@ const USER_ORDER_SELECT = {
     payment: {
         select: {
             id: true, method: true, status: true, amount: true,
-            mpesaReceiptNumber: true, stkPhone: true, checkoutRequestId: true, createdAt: true,
+            mpesaReceiptNumber: true, createdAt: true,
         },
     },
 };
@@ -42,6 +42,48 @@ function withOrderItemImages(order) {
             imageUrl: product?.images?.[0] ?? null,
         })),
     };
+}
+
+async function cancelFailedPaystackOrder(orderId, paymentId) {
+    await prisma.$transaction(async (tx) => {
+        const order = await tx.order.findUnique({
+            where: { id: orderId },
+            include: { items: true, couponUsages: true },
+        });
+
+        if (!order) return;
+
+        for (const item of order.items) {
+            if (!item.productId) continue;
+            const product = await tx.product.findUnique({
+                where: { id: item.productId },
+                select: { stock: true },
+            });
+            if (!product) continue;
+
+            await tx.product.update({
+                where: { id: item.productId },
+                data: { stock: product.stock + item.qty, inStock: true },
+            });
+        }
+
+        for (const usage of order.couponUsages) {
+            await tx.coupon.updateMany({
+                where: { id: usage.couponId, usedCount: { gt: 0 } },
+                data: { usedCount: { decrement: 1 } },
+            });
+            await tx.couponUsage.delete({ where: { id: usage.id } });
+        }
+
+        await tx.payment.update({
+            where: { id: paymentId },
+            data: { status: "FAILED" },
+        });
+        await tx.order.update({
+            where: { id: orderId },
+            data: { status: "CANCELLED" },
+        });
+    });
 }
 
 // POST /api/v1/orders
@@ -153,49 +195,61 @@ export async function placeOrder(req, res, next) {
 
         // ── Payment ──
         const isManual = paymentData.method === "manual";
-        const dbMethod = isManual ? "MPESA_MANUAL" : "MPESA_STK";
+        const isPaystack = paymentData.method === "paystack-mpesa";
+        const dbMethod = isManual ? "MPESA_MANUAL" : "PAYSTACK_MPESA_STK";
 
         let paymentRecord = await prisma.payment.create({
             data: {
                 orderId: order.id,
                 method: dbMethod,
                 amount: total,
-                stkPhone: isManual ? null : (paymentData.stkPhone ?? null),
+                paystackCurrency: isPaystack ? "KES" : null,
                 status: "PENDING",
             },
         });
 
-        let stkDetails = null;
+        let paystackDetails = null;
 
-        // Only attempt STK push when the customer chose that method AND
-        // provided a valid phone number. Manual payments stay PENDING until
-        // the admin confirms via the dashboard once they see the M-Pesa notification.
-        if (!isManual) {
-            let normalisedPhone = null;
-            try { normalisedPhone = normalisePhone(paymentData.stkPhone); } catch { /* invalid format */ }
+        // Manual payments stay PENDING until the admin confirms the payment.
+        if (isPaystack) {
+            try {
+                const checkout = await paystack.initializeTransaction({
+                    email: contact.email,
+                    amount: total,
+                    reference: `${order.ref}-PAYSTACK`,
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                    phone: contact.phone,
+                    callbackUrl: `${FRONTEND_URL}/checkout?payment=paystack&reference=${encodeURIComponent(`${order.ref}-PAYSTACK`)}`,
+                    metadata: {
+                        order_id: order.id,
+                        order_ref: order.ref,
+                        guest_session: owner.type === "guest" ? owner.sessionId : undefined,
+                    },
+                });
 
-            if (normalisedPhone) {
+                paymentRecord = await prisma.payment.update({
+                    where: { id: paymentRecord.id },
+                    data: {
+                        paystackReference: checkout.reference,
+                        paystackAccessCode: checkout.access_code ?? null,
+                        paystackAuthorizationUrl: checkout.authorization_url ?? null,
+                    },
+                });
+
+                paystackDetails = {
+                    reference: paymentRecord.paystackReference,
+                    authorizationUrl: paymentRecord.paystackAuthorizationUrl,
+                    accessCode: paymentRecord.paystackAccessCode,
+                };
+            } catch (paystackError) {
+                logger.error("[placeOrder] Paystack initialization failed", paystackError);
                 try {
-                    const stkRes = await initiateSTKPush({
-                        amount: total,
-                        phone: normalisedPhone,
-                        orderId: order.id,
-                        description: "CastraOrder",
-                    });
-
-                    paymentRecord = await prisma.payment.update({
-                        where: { id: paymentRecord.id },
-                        data: { stkPhone: normalisedPhone, checkoutRequestId: stkRes.CheckoutRequestID ?? null },
-                    });
-
-                    stkDetails = { checkoutRequestId: stkRes.CheckoutRequestID, customerMessage: stkRes.CustomerMessage };
-                } catch (stkError) {
-                    logger.error("[placeOrder] STK push failed", stkError);
-                    paymentRecord = await prisma.payment.update({
-                        where: { id: paymentRecord.id },
-                        data: { status: "FAILED" },
-                    });
+                    await cancelFailedPaystackOrder(order.id, paymentRecord.id);
+                } catch (cleanupError) {
+                    logger.error("[placeOrder] Paystack failure cleanup failed", cleanupError);
                 }
+                throw new AppError("Unable to initialize Paystack payment. Please try again.", 502);
             }
         }
 
@@ -224,7 +278,11 @@ export async function placeOrder(req, res, next) {
             logger.warn(`[placeOrder] No recipient email for order ${order.ref} — user email skipped.`);
         }
 
-        if (ADMIN_EMAIL) {
+        const suppressAdminNotification =
+            process.env.NODE_ENV !== "production"
+            && req.get("x-castra-test") === "paystack-prompt";
+
+        if (ADMIN_EMAIL && !suppressAdminNotification) {
             sendMail({
                 to: ADMIN_EMAIL,
                 ...buildAdminOrderEmail({
@@ -238,7 +296,6 @@ export async function placeOrder(req, res, next) {
                     shippingAddress: `${delivery.street}, ${delivery.city}, ${delivery.county}`,
                     paymentMethod: dbMethod,
                     paymentStatus: paymentRecord?.status ?? "PENDING",
-                    stkPhone: isManual ? "" : (paymentData.stkPhone ?? ""),
                     orderUrl: adminUrl,
                 }),
             }).catch((e) => logger.error("[placeOrder] admin email failed", e));
@@ -254,9 +311,15 @@ export async function placeOrder(req, res, next) {
                 items: order.items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
             },
             payment: paymentRecord
-                ? { id: paymentRecord.id, method: paymentRecord.method, status: paymentRecord.status }
+                ? {
+                    id: paymentRecord.id,
+                    method: paymentRecord.method,
+                    status: paymentRecord.status,
+                    reference: paymentRecord.paystackReference,
+                    authorizationUrl: paymentRecord.paystackAuthorizationUrl,
+                }
                 : null,
-            stk: stkDetails,
+            paystack: paystackDetails,
         });
     } catch (error) {
         next(error);

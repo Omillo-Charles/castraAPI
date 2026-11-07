@@ -40,7 +40,7 @@ REST API backend for [Castra Households](https://castrahouseholds.co.ke) — a K
 | `helmet` | 8.0 | HTTP security headers |
 | `express-rate-limit` | 7.5 | Rate limiting per route group |
 | `multer` | 1.4 | Multipart file uploads |
-| `axios` | 1.7 | M-Pesa Daraja HTTP calls |
+| `axios` | 1.7 | Paystack HTTP calls |
 | `cookie-parser` | 1.4 | HTTP-only cookie parsing |
 
 The project uses **ES Modules** (`"type": "module"`) throughout.
@@ -59,7 +59,7 @@ castraAPI/
 ├── config/
 │   ├── cloudinary.js         # Cloudinary SDK setup + multer storage engine
 │   ├── env.js                # Centralised exports of all process.env vars
-│   ├── mpesa.js              # Safaricom Daraja STK Push helpers + callback parser
+│   ├── paystack.js           # Paystack transaction and webhook helpers
 │   ├── passport.js           # Google OAuth Passport strategy
 │   └── resend.js             # Resend client initialisation + sendMail() helper
 ├── controllers/
@@ -67,7 +67,7 @@ castraAPI/
 │   │                         #   forgot/reset password, email verify + resend
 │   ├── cart.controller.js    # Cart CRUD + coupon application (user + guest)
 │   ├── order.controller.js   # Place order, list, track, get, update status
-│   ├── payment.controller.js # STK push, status polling, Daraja callback, admin update
+│   ├── payment.controller.js # Paystack verification/webhook and admin payment update
 │   ├── product.controller.js # Product CRUD, toggle active/inactive
 │   ├── user.controller.js    # Profile read/update, password change, account delete
 │   ├── wishlist.controller.js# Wishlist add/remove/check
@@ -85,10 +85,9 @@ castraAPI/
 │   ├── cacher.js             # Upstash Redis response cache + invalidation helpers
 │   ├── error.js              # AppError class + global Express error handler
 │   ├── logger.js             # Sentry init + logger wrapper (info/warn/error)
-│   ├── rateLimiter.js        # Global, auth, STK, public, and admin write limiters
+│   ├── rateLimiter.js        # Global, auth, payment, public, and admin write limiters
 │   ├── requireAuth.js        # JWT verification middleware + requireAdmin guard
 │   ├── resolveCart.js        # Resolves cart owner — authenticated user or guest session
-│   ├── safaricomOnly.js      # IP allowlist for Safaricom Daraja callback route
 │   └── validator.js          # Zod schemas + validate() middleware factory
 ├── emails/
 │   ├── resetPassword.js      # Password reset HTML + text email template
@@ -110,7 +109,7 @@ Prisma schema is at `prisma/schema.prisma`. The database has 11 models.
 ```
 Role           → USER | ADMIN
 OrderStatus    → CONFIRMED | PROCESSING | DISPATCHED | OUT_FOR_DELIVERY | DELIVERED
-PaymentMethod  → MPESA_STK | MPESA_MANUAL
+PaymentMethod  → MPESA_MANUAL | PAYSTACK_MPESA_STK
 PaymentStatus  → PENDING | PAID | FAILED
 ```
 
@@ -165,12 +164,12 @@ Contact and delivery details are snapshotted at order time — they survive any 
 | Column | Type | Notes |
 |--------|------|-------|
 | `orderId` | `String` | Unique, one payment per order |
-| `method` | `PaymentMethod` | `MPESA_STK` or `MPESA_MANUAL` |
+| `method` | `PaymentMethod` | `MPESA_MANUAL` or `PAYSTACK_MPESA_STK` |
 | `status` | `PaymentStatus` | Default: `PENDING` |
 | `amount` | `Int` | KES |
-| `stkPhone` | `String?` | Phone that received the STK prompt |
-| `checkoutRequestId` | `String?` | Daraja ID for polling |
 | `mpesaReceiptNumber` | `String?` | Confirmed M-Pesa receipt |
+| `paystackReference` | `String?` | Paystack transaction reference |
+| `paystackAuthorizationUrl` | `String?` | Hosted Paystack checkout URL |
 
 Other models: `Address`, `Cart`, `CartItem`, `Wishlist`, `WishlistItem`, `OrderItem`, `RefreshToken`.
 
@@ -247,7 +246,7 @@ All routes require authentication.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/track?q=` | — | Public tracking by order ref or phone number |
-| `POST` | `/` | User / Guest | Place order from active cart. Triggers stock deduction, emails, optional STK push |
+| `POST` | `/` | User / Guest | Place order from active cart. Triggers stock deduction, emails, and optional Paystack checkout |
 | `GET` | `/` | ✅ User | List own orders. Admin: list all orders with search + status filter |
 | `GET` | `/customers` | 🔒 Admin | Customer list derived from order history |
 | `GET` | `/:idOrRef` | ✅ User | Get single order by ID or ref |
@@ -257,10 +256,10 @@ All routes require authentication.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/stkpush` | ✅ User | Initiate M-Pesa STK Push for an order |
-| `GET` | `/status/:checkoutRequestId` | ✅ User | Poll STK payment status |
+| `POST` | `/paystack/initialize` | ✅ User | Initialize hosted Paystack checkout |
+| `GET` | `/paystack/verify/:reference` | User / Guest | Verify a Paystack payment reference |
+| `POST` | `/paystack/webhook` | Paystack | Process signed Paystack events |
 | `PATCH` | `/:id/status` | 🔒 Admin | Manually confirm or fail a payment |
-| `POST` | `/mpesa/callback` | 🛡️ Safaricom IPs | Daraja STK result callback (also at `/payment/mpesa/callback`) |
 
 ### Addresses — `/api/v1/addresses`
 
@@ -327,10 +326,6 @@ Used on cart and order routes. Identifies the cart owner without requiring login
 - If the request has a valid JWT → `req.cartOwner = { type: "user", userId }`
 - Otherwise reads/creates a signed `sessionId` cookie → `req.cartOwner = { type: "guest", sessionId }`
 
-### `safaricomOnly`
-
-Applied exclusively to the Daraja M-Pesa callback route. Checks `req.ip` against Safaricom's published CIDR blocks. In non-production environments it passes through and logs the IP. Always returns `200` on rejection (so Daraja doesn't keep retrying).
-
 ### `cacheResponse`
 
 Wraps route handlers with an Upstash Redis GET → handler → SET pipeline. The cache key is computed from a function passed at route registration time (e.g. `productListKey(req.query)`). Write operations call `invalidateProducts()` which scans and deletes all `products:list:*` keys.
@@ -376,17 +371,11 @@ The customer pays using their M-Pesa app:
 
 The order is created with `status: PENDING`. An admin confirms receipt from the dashboard once they see the M-Pesa notification, triggering `PATCH /api/v1/payments/:id/status`.
 
-### STK Push (`MPESA_STK`) — wired, UI disabled
+### Paystack M-Pesa Prompt (`PAYSTACK_MPESA_STK`) — active
 
-When live Safaricom Daraja credentials are available:
-
-1. `POST /api/v1/orders` calls `initiateSTKPush()` if `stkPhone` is provided
-2. Daraja sends a push notification to the customer's phone
-3. The frontend polls `GET /api/v1/payments/status/:checkoutRequestId` every 5 seconds for up to 60 seconds
-4. Safaricom POSTs the result to `POST /api/v1/payments/mpesa/callback`
-5. The callback handler updates the payment status with an idempotency guard — terminal states (`PAID`, `FAILED`) are never overwritten
-
-To re-enable STK in the UI, remove the `disabled` attribute from the STK tab button in `app/checkout/page.tsx` on the frontend.
+The order endpoint initializes a hosted Paystack checkout for the selected prompt
+method. The callback URL returns the customer to the frontend, which verifies the
+reference server-side. Signed webhooks are also verified and processed idempotently.
 
 ---
 
@@ -461,13 +450,12 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
-# ── M-Pesa (Safaricom Daraja) ─────────────────────────────────────────────────
-MPESA_ENV=sandbox              # sandbox | production
-MPESA_CONSUMER_KEY=
-MPESA_CONSUMER_SECRET=
-MPESA_BUSINESS_SHORT_CODE=
-MPESA_PASSKEY=
-MPESA_CALLBACK_URL=            # must be a public HTTPS URL
+# ── Paystack ──────────────────────────────────────────────────────────────────
+PAYSTACK_ENV=sandbox           # sandbox | production
+PAYSTACK_PUBLIC_KEY=
+PAYSTACK_SECRET_KEY=
+PAYSTACK_WEBHOOK_SIGNING_SECRET=
+PAYSTACK_WEBHOOK_URL=
 
 # ── Email (Resend) ────────────────────────────────────────────────────────────
 RESEND_API_KEY=

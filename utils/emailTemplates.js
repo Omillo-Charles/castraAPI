@@ -299,7 +299,6 @@ Track your order: ${orderUrl}
  * @param {string} p.shippingAddress
  * @param {string} p.paymentMethod
  * @param {string} p.paymentStatus   PENDING | PAID | FAILED
- * @param {string} p.stkPhone
  * @param {string} p.orderUrl
  */
 export function buildAdminOrderEmail({
@@ -311,16 +310,17 @@ export function buildAdminOrderEmail({
     subtotal        = 0,
     total           = 0,
     shippingAddress = "",
-    paymentMethod   = "MPESA_STK",
+    paymentMethod   = "MPESA_MANUAL",
     paymentStatus   = "PENDING",
-    stkPhone        = "",
     orderUrl        = "",
 } = {}) {
     const collection  = categoryText(items);
     const subject     = `[New Order] #${orderId} – ${customerName} – Payment: ${paymentStatus}`;
-    const methodLabel = paymentMethod === "MPESA_STK"    ? "M-Pesa STK Push"
-                      : paymentMethod === "MPESA_MANUAL" ? "M-Pesa Manual (Paybill/Send Money)"
-                      : paymentMethod;
+    const methodLabel = paymentMethod === "MPESA_MANUAL"
+        ? "M-Pesa Manual (Paybill/Send Money)"
+        : paymentMethod === "PAYSTACK_MPESA_STK"
+            ? "M-Pesa Prompt (Paystack)"
+            : paymentMethod;
     const statusStyle = paymentStatusStyle(paymentStatus);
 
     const infoRows = [
@@ -328,7 +328,7 @@ export function buildAdminOrderEmail({
         ["Email",          customerEmail || "–"],
         ["Phone",          customerPhone],
         ["Deliver to",     shippingAddress],
-        ["Payment",        `${methodLabel}${stkPhone ? ` · ${stkPhone}` : ""}`],
+        ["Payment",        methodLabel],
         ["Payment status", `<span style="${statusStyle}font-weight:600;">${paymentStatus}</span>`],
         ["Order total",    `<span style="color:#C6A16A;font-weight:700;">KES ${total.toLocaleString()}</span>`],
     ].map(([label, value]) => `
@@ -388,7 +388,7 @@ Customer : ${customerName}
 Email    : ${customerEmail || "–"}
 Phone    : ${customerPhone}
 Address  : ${shippingAddress}
-Payment  : ${methodLabel}${stkPhone ? ` · ${stkPhone}` : ""}
+Payment  : ${methodLabel}
 Status   : ${paymentStatus}
 
 Items:

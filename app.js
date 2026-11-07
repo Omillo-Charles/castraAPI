@@ -51,7 +51,14 @@ app.use(helmet({
   // is handled at the frontend (Next.js) level
 }));
 
-app.use(express.json({ limit: "50kb" }));
+app.use(express.json({
+  limit: "50kb",
+  verify: (req, res, buffer) => {
+    if (req.originalUrl.endsWith("/payments/paystack/webhook")) {
+      req.rawBody = Buffer.from(buffer);
+    }
+  },
+}));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
@@ -71,7 +78,6 @@ app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/orders", orderRouter);
 app.use("/api/v1/coupons", couponRouter);
 
-// We also mount the callback at the root /payment/mpesa/callback since Daraja config often points there
 app.use("/payment", paymentRouter);
 
 // Google OAuth routes

@@ -42,9 +42,8 @@ export const orderLimiter = rateLimit({
     handler:         tooManyRequests,
 });
 
-// STK Push
-// M-Pesa STK pushes cost money per request — keep this very tight.
-export const stkLimiter = rateLimit({
+// Payment initialization
+export const paystackLimiter = rateLimit({
     windowMs:        5 * 60 * 1000,  // 5 minutes
     max:             5,               // 5 STK attempts / IP / 5 min
     standardHeaders: "draft-7",
